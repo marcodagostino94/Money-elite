@@ -883,7 +883,8 @@ export default function Home() {
       setDataError("");
     } catch (error) {
       console.error(error);
-      setDataError(error instanceof Error ? `Sincronizzazione non completata: ${error.message}` : "Non è stato possibile sincronizzare i dati. Riprova.");
+      const message = typeof error === "object" && error && "message" in error ? String(error.message) : "Errore sconosciuto";
+      setDataError(`Sincronizzazione non completata: ${message}`);
     } finally {
       setDataBusy(false);
     }
