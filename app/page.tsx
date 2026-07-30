@@ -1027,9 +1027,16 @@ export default function Home() {
     await refreshData();
   };
   const confirmPlannedTransaction = async (transaction: Transaction) => {
-    const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: new Date().toISOString() };
-    if(transaction.accounted) updates.accounted_at = new Date().toISOString();
-    const {error}=await getSupabaseBrowserClient().from("transactions").update(updates).eq("id",transaction.id);
+    const supabase=getSupabaseBrowserClient();
+    let automaticAccounting=false;
+    if(transaction.recurrenceId){
+      const {data}=await supabase.from("recurrences").select("automatic_accounting").eq("id",transaction.recurrenceId).maybeSingle();
+      automaticAccounting=Boolean(data?.automatic_accounting);
+    }
+    const now=new Date().toISOString();
+    const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: now };
+    if(automaticAccounting) updates.accounted_at = now;
+    const {error}=await supabase.from("transactions").update(updates).eq("id",transaction.id);
     if(error){setDataError(error.message);return;}
     await refreshData();
   };
