@@ -225,6 +225,15 @@ alter table transactions enable row level security;
 alter table budgets enable row level security;
 alter table debts enable row level security;
 
+-- I criteri RLS sottostanti mantengono ciascun dato separato per utente.
+-- Questi permessi consentono soltanto agli utenti che hanno effettuato l'accesso
+-- di interrogare e modificare le tabelle dell'app.
+grant usage on schema public to authenticated;
+grant select, insert, update, delete on table
+  profiles, accounts, cards, categories, recurrences, transactions, budgets, debts
+to authenticated;
+grant usage, select on all sequences in schema public to authenticated;
+
 create policy profiles_owner on profiles for all to authenticated
 using ((select auth.uid()) = id)
 with check ((select auth.uid()) = id);
