@@ -28,6 +28,7 @@ export type MoneyTransaction = {
   id: string;
   kind: "income" | "expense" | "transfer" | "refund" | "card_repayment";
   accountId: string;
+  cardId: string | null;
   destinationAccountId: string | null;
   categoryId: string | null;
   recurrenceId: string | null;
@@ -38,6 +39,39 @@ export type MoneyTransaction = {
   dueDate: string | null;
   confirmedAt: string | null;
   accountedAt: string | null;
+  notes: string;
+};
+
+export type MoneyCard = {
+  id: string;
+  name: string;
+  linkedAccountId: string | null;
+  periodType: "monthly" | "no_period";
+  creditLimit: number | null;
+  cycleStartDay: number | null;
+  paymentDay: number | null;
+  automaticPayment: boolean;
+  archived: boolean;
+};
+
+export type MoneyBudget = {
+  id: string;
+  categoryId: string;
+  amount: number;
+  month: string;
+};
+
+export type MoneyRecurrence = {
+  id: string;
+  accountId: string | null;
+  cardId: string | null;
+  categoryId: string | null;
+  amount: number;
+  nextDate: string;
+  frequency: "daily" | "weekly" | "monthly" | "yearly";
+  automaticAccounting: boolean;
+  isSubscription: boolean;
+  active: boolean;
   notes: string;
 };
 
@@ -99,18 +133,22 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
 
 export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
   await ensureInitialData(supabase, userId);
-  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, { data: rawTransactions, error: transactionsError }] = await Promise.all([
+  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, { data: rawTransactions, error: transactionsError }, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase.from("categories").select("*").order("name"),
     supabase.from("transactions").select("*").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }),
+    supabase.from("cards").select("*").order("name"),
+    supabase.from("budgets").select("*").order("month", { ascending: false }),
+    supabase.from("recurrences").select("*").eq("active", true).order("next_date"),
   ]);
-  const error = accountsError ?? categoriesError ?? transactionsError;
+  const error = accountsError ?? categoriesError ?? transactionsError ?? cardsError ?? budgetsError ?? recurrencesError;
   if (error) throw error;
 
   const transactions: MoneyTransaction[] = (rawTransactions ?? []).map(row => ({
     id: row.id,
     kind: row.kind,
     accountId: row.account_id,
+    cardId: row.card_id,
     destinationAccountId: row.destination_account_id,
     categoryId: row.category_id,
     recurrenceId: row.recurrence_id,
@@ -161,7 +199,24 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     color: row.color,
     icon: row.icon,
   }));
-  return { accounts, categories, transactions };
+  const cards: MoneyCard[] = (rawCards ?? []).map(row => ({
+    id: row.id,
+    name: row.name,
+    linkedAccountId: row.linked_account_id,
+    periodType: row.period_type,
+    creditLimit: row.credit_limit == null ? null : Number(row.credit_limit),
+    cycleStartDay: row.cycle_start_day,
+    paymentDay: row.payment_day,
+    automaticPayment: Boolean(row.automatic_payment),
+    archived: Boolean(row.archived_at),
+  }));
+  const budgets: MoneyBudget[] = (rawBudgets ?? []).map(row => ({ id: row.id, categoryId: row.category_id, amount: Number(row.amount), month: row.month }));
+  const recurrences: MoneyRecurrence[] = (rawRecurrences ?? []).map(row => ({
+    id: row.id, accountId: row.account_id, cardId: row.card_id, categoryId: row.category_id,
+    amount: Number(row.amount), nextDate: row.next_date, frequency: row.frequency,
+    automaticAccounting: Boolean(row.automatic_accounting), isSubscription: Boolean(row.is_subscription), active: Boolean(row.active), notes: row.notes ?? "",
+  }));
+  return { accounts, categories, transactions, cards, budgets, recurrences };
 }
 
 export const toIsoDate = (date: Date) => {

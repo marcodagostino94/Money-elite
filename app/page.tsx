@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatItalianDate, loadMoneyData, toIsoDate, type MoneyAccount, type MoneyCategory, type MoneyTransaction } from "@/lib/money/data";
+import { formatItalianDate, loadMoneyData, toIsoDate, type MoneyAccount, type MoneyBudget, type MoneyCard, type MoneyCategory, type MoneyRecurrence, type MoneyTransaction } from "@/lib/money/data";
 
 type Section =
   | "Dashboard"
@@ -32,6 +32,7 @@ type Transaction = {
   isRefund?: boolean;
   refundOf?: string;
   accountId?: string;
+  cardId?: string | null;
   destinationAccountId?: string | null;
   categoryId?: string | null;
   recurrenceId?: string | null;
@@ -113,8 +114,9 @@ const addOneMonth = (isoDate: string) => {
   return toIsoDate(date);
 };
 
-const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[], categories: MoneyCategory[]): Transaction => {
+const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[], categories: MoneyCategory[], cards: MoneyCard[]): Transaction => {
   const account = accounts.find(item => item.id === row.accountId);
+  const card = cards.find(item => item.id === row.cardId);
   const category = categories.find(item => item.id === row.categoryId);
   const parent = category?.parentId ? categories.find(item => item.id === category.parentId) : null;
   const categoryLabel = category ? (parent ? `${parent.name} › ${category.name}` : category.name) : row.kind === "transfer" ? "Trasferimento tra conti" : "Senza categoria";
@@ -123,8 +125,9 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     id: row.id,
     label: row.notes || (row.kind === "refund" ? `Rimborso ${category?.name ?? "spesa"}` : category?.name ?? (row.kind === "transfer" ? "Trasferimento fondi" : "Transazione")),
     category: row.kind === "refund" ? `Rimborso · ${categoryLabel}` : categoryLabel,
-    account: account?.name ?? "Conto archiviato",
+    account: card?.name ?? account?.name ?? "Conto archiviato",
     accountId: row.accountId,
+    cardId: row.cardId,
     destinationAccountId: row.destinationAccountId,
     categoryId: row.categoryId,
     recurrenceId: row.recurrenceId,
@@ -335,7 +338,7 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
   );
 }
 
-function Dashboard({ transactions, accounts, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
+function Dashboard({ transactions, accounts, cards, budgets, categories, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
   const [chart, setChart] = useState<"wealth" | "week" | "month">("wealth");
   const today = toIsoDate(new Date());
   const currentMonth = today.slice(0,7);
@@ -348,6 +351,8 @@ function Dashboard({ transactions, accounts, setActive, confirmTransaction, open
   const savings = visibleAccounts.filter(account=>account.type==="savings").reduce((sum,account)=>sum+account.balance,0);
   const liquidity = visibleAccounts.filter(account=>account.type!=="savings").reduce((sum,account)=>sum+account.balance,0);
   const wealth = liquidity+savings;
+  const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,transactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
+  const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=transactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
   const weekExpenses = transactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
@@ -370,7 +375,7 @@ function Dashboard({ transactions, accounts, setActive, confirmTransaction, open
           <h2>{money(wealth)}</h2>
           <div className="balance-breakdown">
             <div><small>LIQUIDITÀ</small><b>{money(liquidity)}</b></div>
-            <div><small>CARTA DI CREDITO</small><b className="card-debt">{money(0)}</b></div>
+            <div><small>CARTA DI CREDITO</small><b className="card-debt">{money(-cardDebt)}</b></div>
             <div><small>RISPARMI</small><b>{money(savings)}</b></div>
           </div>
         </button>
@@ -408,14 +413,14 @@ function Dashboard({ transactions, accounts, setActive, confirmTransaction, open
         </article>
         <article className="panel budget-panel dashboard-budget">
           <div className="panel-title"><div><h3>Budget mensili</h3><p>Luglio 2026</p></div><button className="text-button" onClick={() => setActive("Budget")}>Gestisci →</button></div>
-          <div className="dashboard-budget-grid">{budgets.map((b) => (
+          <div className="dashboard-budget-grid">{dashboardBudgets.map((b) => (
             <div className="budget-row" key={b.name}>
               <div><b>{b.name}</b><span>{money(b.spent)} di {money(b.limit)}</span></div>
               <div className="progress"><i style={{ width: `${(b.spent / b.limit) * 100}%`, background: b.color }} /></div>
               <small>{Math.round((b.spent / b.limit) * 100)}%</small>
             </div>
-          ))}</div>
-          <div className="budget-footer"><span>Budget disponibile</span><strong>€ 388,00</strong></div>
+          ))}{!dashboardBudgets.length&&<div className="empty">Nessun budget creato per questo mese.</div>}</div>
+          {dashboardBudgets.length>0&&<div className="budget-footer"><span>Budget disponibile</span><strong>{money(dashboardBudgets.reduce((sum,item)=>sum+item.limit-item.spent,0))}</strong></div>}
         </article>
       </section>
     </>
@@ -458,8 +463,8 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
-function GenericSection({ section, onAdd, accounts, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string) => void; accounts: MoneyAccount[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void }) {
-  const cards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
+function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; refresh: () => Promise<void> }) {
+  const legacyCards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
     Conti: [
       { name: "Conto principale", sub: "Banca ·•• 4832", value: "€ 8.940,65", icon: "B" },
       { name: "Contanti", sub: "Portafoglio", value: "€ 520,00", icon: "€" },
@@ -474,20 +479,20 @@ function GenericSection({ section, onAdd, accounts, transactions, onSaveAccount,
       { name: "Cena di gruppo", sub: "Da restituire a Sara", value: "−€ 32,00", icon: "S" },
     ],
   };
-  if (section === "Budget") return <BudgetSection />;
+  if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
   if (section === "Report") return <ReportSection />;
   if (section === "Impostazioni") return <SettingsSection />;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} />;
   if (section === "Pianificate") return <PlannedSection transactions={transactions} openTransaction={openTransaction}/>;
-  if (section === "Abbonamenti") return <SubscriptionsSection />;
+  if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh}/>;
   if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} openTransaction={openTransaction}/>;
-  if (section === "Carte di credito") return <CreditCardsSection onAdd={onAdd}/>;
+  if (section === "Carte di credito") return <CreditCardsSection onAdd={onAdd} cards={cards} accounts={accounts} transactions={transactions} refresh={refresh} openTransaction={openTransaction}/>;
   const info = sectionData[section];
   return (
     <section className="section-page">
       <div className="section-toolbar"><button className="outline">＋ {info.action}</button></div>
       <div className="item-grid">
-        {(cards[section] || []).map((item) => (
+        {(legacyCards[section] || []).map((item) => (
           <article className="item-card" key={item.name}>
             <div className="item-icon">{item.icon}</div><div className="item-body"><small>{item.sub}</small><h3>{item.name}</h3><strong>{item.value}</strong></div><button>•••</button>
           </article>
@@ -559,13 +564,33 @@ function AccountsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?:
   return <section className="section-page"><p className="section-help">Tocca un conto per vedere le transazioni del mese corrente.</p><div className="accounts-total"><div><small>TOTALE DEI CONTI VISIBILI</small><span>I conti nascosti non sono inclusi</span></div><strong>{money(visibleTotal)}</strong></div><div className="accounts-list">{activeAccounts.map(a=>{const hidden=hiddenAccounts.has(a.name);return <article className={`account-row ${a.voucher?"voucher-account":""} ${hidden?"hidden-account":""}`} key={a.name} onClick={()=>setDetailAccount(a.name)}><div className="item-icon real-icon"><AppIcon name={a.icon}/></div><div><small>{a.sub}</small><h3>{a.name}</h3><strong>{hidden?"Saldo nascosto":money(a.balance)}</strong>{a.voucher&&!hidden&&<div className="voucher-meter"><i style={{width:"60%"}}/><span>18 buoni</span></div>}</div><button className="eye-button modern" title={hidden?"Mostra conto":"Nascondi conto"} onClick={e=>{e.stopPropagation();toggleHidden(a.name)}}><AppIcon name={hidden?"eyeOff":"eye"} size={17}/></button><button title="Trasferisci fondi" onClick={e=>{e.stopPropagation();onAdd("transfer",a.name)}}><AppIcon name="transfer" size={17}/></button><button onClick={e=>{e.stopPropagation();setMenu(menu===a.name?null:a.name)}}><AppIcon name="more" size={18}/></button>{menu===a.name&&<div className="account-menu" onClick={e=>e.stopPropagation()}>{a.voucher&&<button onClick={()=>onAdd("income",a.name)}><AppIcon name="voucher" size={14}/> Ricarica buoni</button>}<button onClick={()=>onAdd("income",a.name)}><AppIcon name="income" size={14}/> Aggiungi entrata</button><button onClick={()=>onAdd("expense",a.name)}><AppIcon name="expense" size={14}/> Aggiungi uscita</button><button><AppIcon name="edit" size={14}/> Modifica conto</button><button onClick={()=>archive(a.name)}><AppIcon name="archive" size={14}/> Archivia conto</button><button className="danger"><AppIcon name="trash" size={14}/> Elimina conto</button></div>}</article>})}</div>{archived.length>0&&<div className="archived-accounts"><div><b>Conti archiviati</b><span>Le transazioni passate restano in bilanci e report.</span></div>{archived.map(a=><button key={a.name} onClick={()=>setDetailAccount(a.name)}><span><AppIcon name={a.icon}/></span><div><b>{a.name}</b><small>Archiviato · sola consultazione</small></div><strong><AppIcon name="forward" size={16}/></strong></button>)}</div>}<button className="quick-main quick-standalone" onClick={()=>setNewAccount(true)}><AppIcon name="plus" size={22}/></button>{newAccount&&<SimpleEntityModal title="Crea nuovo conto" close={()=>setNewAccount(false)} type="account"/>}</section>
 }
 
-function CreditCardsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void }) {
-  const [newCard, setNewCard] = useState(false);
-  const [detail, setDetail] = useState(false);
+function CreditCardsSection({ onAdd, cards, accounts, transactions, refresh, openTransaction }: { onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; cards: MoneyCard[]; accounts: MoneyAccount[]; transactions: Transaction[]; refresh: () => Promise<void>; openTransaction: (transaction: Transaction) => void }) {
+  const [editor, setEditor] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [actions, setActions] = useState(false);
   const [repay, setRepay] = useState(false);
-  if (detail) return <section className="section-page"><div className="inner-page-header"><button onClick={()=>setDetail(false)}><AppIcon name="back"/></button><div><small>CARTA DI CREDITO</small><h2>Carta Elite</h2><p>Periodo 21/07/26 — 20/08/26</p></div></div><div className="card-due-summary"><span>Ammontare dovuto</span><strong>€ 1.146,30</strong></div><article className="panel month-transactions">{initialTransactions.filter(t=>t.account==="Carta Elite").map(t=><TransactionRow key={t.id} t={t}/>)}</article><div className={actions?"card-actions open":"card-actions"}><div><button onClick={()=>setRepay(true)}><span><AppIcon name="card"/></span>Ripaga</button><button onClick={()=>onAdd("transfer","Carta Elite")}><span><AppIcon name="transfer"/></span>Trasferisci fondi</button><button onClick={()=>onAdd("income","Carta Elite")}><span><AppIcon name="income"/></span>Entrata</button><button onClick={()=>onAdd("expense","Carta Elite")}><span><AppIcon name="expense"/></span>Uscita</button></div><button className="quick-main" onClick={()=>setActions(x=>!x)}><AppIcon name={actions?"close":"plus"} size={23}/></button></div>{repay&&<RepayModal close={()=>setRepay(false)}/>}</section>;
-  return <section className="section-page"><div className="cards-total"><span>AMMONTARE DOVUTO</span><strong>€ 1.146,30</strong></div><button className="credit-card-panel" onClick={()=>setDetail(true)}><div><small>CARTA ELITE</small><h3>€ 1.146,30</h3><span>Debito corrente</span></div><div className="credit-period"><span>21 LUG</span><b>23%</b><span>20 AGO</span><div className="progress"><i style={{width:"23%"}}/></div><p>Limite € 5.000,00 · Residuo € 3.853,70</p></div><i>›</i></button><button className="quick-main quick-standalone" onClick={()=>setNewCard(true)}>+</button>{newCard&&<SimpleEntityModal title="Crea una carta di credito" close={()=>setNewCard(false)} type="card"/>}</section>
+  const visibleCards = cards.filter(card => !card.archived);
+  const debtFor = (card: MoneyCard) => transactions.filter(t=>t.cardId===card.id).reduce((sum,t)=>sum+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0);
+  const detail = cards.find(card=>card.id===detailId);
+  if (detail) {
+    const due = Math.max(0,debtFor(detail));
+    const rows = transactions.filter(t=>t.cardId===detail.id);
+    const linked = accounts.find(account=>account.id===detail.linkedAccountId);
+    return <section className="section-page"><div className="inner-page-header"><button onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CARTA DI CREDITO</small><h2>{detail.name}</h2><p>{detail.periodType==="monthly"?`Addebito il ${detail.paymentDay ?? detail.cycleStartDay ?? 1} del mese`:"Carta senza periodo"}</p></div></div><div className="card-due-summary"><span>Ammontare dovuto</span><strong>{money(due)}</strong></div><article className="panel month-transactions">{rows.length?rows.map(t=><TransactionRow key={t.id} t={t} onOpen={openTransaction}/>):<div className="empty">Nessun movimento su questa carta.</div>}</article><div className={actions?"card-actions open":"card-actions"}><div><button onClick={()=>setRepay(true)}><span><AppIcon name="card"/></span>Ripaga</button><button onClick={()=>onAdd("transfer",linked?.name)}><span><AppIcon name="transfer"/></span>Trasferisci fondi</button><button onClick={()=>onAdd("income",linked?.name,detail.id)}><span><AppIcon name="income"/></span>Entrata</button><button onClick={()=>onAdd("expense",linked?.name,detail.id)}><span><AppIcon name="expense"/></span>Uscita</button></div><button className="quick-main" onClick={()=>setActions(x=>!x)}><AppIcon name={actions?"close":"plus"} size={23}/></button></div>{repay&&<CardRepayModal card={detail} due={due} accounts={accounts} close={()=>setRepay(false)} refresh={refresh}/>}</section>;
+  }
+  const totalDue = visibleCards.reduce((sum,card)=>sum+Math.max(0,debtFor(card)),0);
+  return <section className="section-page"><div className="cards-total"><span>AMMONTARE DOVUTO</span><strong>{money(totalDue)}</strong></div>{visibleCards.length?visibleCards.map(card=>{const due=Math.max(0,debtFor(card));const limit=card.creditLimit||0;const percent=limit?Math.min(100,Math.round(due/limit*100)):0;return <button className="credit-card-panel" key={card.id} onClick={()=>setDetailId(card.id)}><div><small>{card.name.toUpperCase()}</small><h3>{money(due)}</h3><span>Debito corrente</span></div><div className="credit-period"><span>{card.periodType==="monthly"?`Ciclo ${card.cycleStartDay ?? 1}`:"Senza ciclo"}</span><b>{percent}%</b><span>{card.paymentDay?`Pag. ${card.paymentDay}`:""}</span><div className="progress"><i style={{width:`${percent}%`}}/></div><p>{limit?`Limite ${money(limit)} · Residuo ${money(Math.max(0,limit-due))}`:"Nessun limite impostato"}</p></div><i>›</i></button>}):<div className="empty panel">Nessuna carta di credito. Aggiungine una con il pulsante +.</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor(true)}><AppIcon name="plus" size={22}/></button>{editor&&<CardModal accounts={accounts} close={()=>setEditor(false)} refresh={refresh}/>}</section>
+}
+
+function CardModal({ accounts, close, refresh }: { accounts: MoneyAccount[]; close: () => void; refresh: () => Promise<void> }) {
+  const [saving,setSaving]=useState(false);
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();setSaving(true);const fd=new FormData(event.currentTarget);const {data:{user}}=await getSupabaseBrowserClient().auth.getUser();if(!user)return;const {error}=await getSupabaseBrowserClient().from("cards").insert({user_id:user.id,name:String(fd.get("name")||"").trim(),linked_account_id:String(fd.get("account")||"")||null,credit_limit:parseItalianAmount(fd.get("limit")),period_type:fd.get("period")==="no_period"?"no_period":"monthly",cycle_start_day:Number(fd.get("cycle"))||1,payment_day:Number(fd.get("payment"))||1});if(error){alert(error.message);setSaving(false);return;}await refresh();close();};
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>NUOVA CARTA</small><h2>Crea una carta di credito</h2></div></div><label>Nome<input name="name" required placeholder="Es. Carta Elite"/></label><label>Conto associato<select name="account" required>{accounts.filter(a=>!a.archived).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Limite<input name="limit" type="text" inputMode="decimal" placeholder="5.000,00"/></label><label>Tipo di carta<select name="period"><option value="monthly">Mensile</option><option value="no_period">Senza periodo</option></select></label><div className="form-grid"><label>Giorno inizio ciclo<select name="cycle">{Array.from({length:31},(_,i)=><option key={i+1}>{i+1}</option>)}</select></label><label>Giorno addebito<select name="payment">{Array.from({length:31},(_,i)=><option key={i+1}>{i+1}</option>)}</select></label></div><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer" disabled={saving}>{saving?"Salvataggio…":"Salva"}</button></div></form></div>;
+}
+
+function CardRepayModal({ card, due, accounts, close, refresh }: { card: MoneyCard; due: number; accounts: MoneyAccount[]; close: () => void; refresh: () => Promise<void> }) {
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const accountId=String(fd.get("account"));const {data:{user}}=await getSupabaseBrowserClient().auth.getUser();if(!user)return;const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:user.id,kind:"card_repayment",account_id:accountId,card_id:card.id,amount:parseItalianAmount(fd.get("amount")),transaction_date:toIsoDate(new Date()),confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:`Pagamento ${card.name}`});if(error){alert(error.message);return;}await refresh();close();};
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>PAGAMENTO CARTA</small><h2>Ripaga {card.name}</h2></div></div><div className="repay-due"><span>Ammontare dovuto</span><strong>{money(due)}</strong></div><label>Valore<input name="amount" type="text" inputMode="decimal" defaultValue={amountInput(due)} required/></label><label>Conto di pagamento<select name="account">{accounts.filter(a=>!a.archived).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer">Salva pagamento</button></div></form></div>;
 }
 
 function SimpleEntityModal({ title, close, type }: { title: string; close: () => void; type: "account" | "card" }) {
@@ -625,20 +650,27 @@ function PlannedSection({transactions,openTransaction}:{transactions:Transaction
   return <section className="section-page"><article className="panel schedule-list">{items.length?items.map(item=><button className="schedule-row" key={item.id} onClick={()=>openTransaction(item)}><div className="schedule-icon" style={{color:categoryColor(item.category),background:`${categoryColor(item.category)}18`}}><AppIcon name={item.icon}/></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><div><strong>{money(item.amount)}</strong><span>{item.date}</span></div><i className={item.kind==="transfer"?"transfer-line":item.amount>0?"income-line":"expense-line"}/></button>):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div></section>
 }
 
-function SubscriptionsSection() {
-  const items = [["Assicurazione moto","39,25","Trasporti","30/06/26","31/07/26",95],["Garage","260,00","Casa","05/07/26","05/08/26",79],["Netflix e Sky","14,89","Sky e Netflix","28/07/26","28/08/26",24],["Fibra casa","29,90","Vodafone","08/07/26","08/08/26",68]] as const;
-  return <section className="section-page"><div className="subscription-summary"><div><small>PROSSIMI 30 GIORNI</small><strong>€ 492,07</strong></div><div><small>PROSSIMI 365 GIORNI</small><strong>€ 5.100,84</strong></div><div><small>MEDIA MENSILE</small><strong>€ 425,40</strong></div></div><article className="panel subscription-list">{items.map((x)=><div className="subscription-row" key={x[0]}><div className="subscription-icon" style={{color:categoryColor(x[2]),background:`${categoryColor(x[2])}18`}}><AppIcon name={categoryIcon(x[2])}/></div><div className="subscription-body"><h3>{x[0]}</h3><div className="subscription-dates"><span>{x[3]}</span><b>{x[5]}%</b><span>{x[4]}</span></div><div className="progress"><i style={{width:`${x[5]}%`,background:x[5]>85?"#c96360":x[5]>60?"#e0a04e":"#559476"}}/></div><strong>€ {x[1]} ogni mese</strong><small>{x[2]} · € {x[1]} / mese</small></div><button><AppIcon name="more"/></button></div>)}</article></section>
+function SubscriptionsSection({ recurrences, categories, refresh }: { recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; refresh: () => Promise<void> }) {
+  const subscriptions=recurrences.filter(item=>item.isSubscription);
+  const totalMonth=subscriptions.reduce((sum,item)=>sum+item.amount,0);
+  const remove=async(id:string)=>{if(!window.confirm("Eliminare questo abbonamento?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:false}).eq("id",id);if(error){alert(error.message);return;}await refresh();};
+  return <section className="section-page"><div className="subscription-summary"><div><small>PROSSIMI 30 GIORNI</small><strong>{money(totalMonth)}</strong></div><div><small>PROSSIMI 365 GIORNI</small><strong>{money(totalMonth*12)}</strong></div><div><small>MEDIA MENSILE</small><strong>{money(totalMonth)}</strong></div></div><article className="panel subscription-list">{subscriptions.length?subscriptions.map(item=>{const category=categories.find(c=>c.id===item.categoryId);return <div className="subscription-row" key={item.id}><div className="subscription-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={category?.icon||"subscriptions"}/></div><div className="subscription-body"><h3>{item.notes||category?.name||"Abbonamento"}</h3><div className="subscription-dates"><span>Prossima data</span><b>{formatItalianDate(item.nextDate)}</b><span>{item.frequency==="monthly"?"Ogni mese":item.frequency}</span></div><div className="progress"><i style={{width:"45%",background:"#7c65b5"}}/></div><strong>{money(item.amount)} ogni {item.frequency==="monthly"?"mese":item.frequency}</strong><small>{category?.name||"Senza categoria"}</small></div><button onClick={()=>void remove(item.id)} aria-label="Elimina abbonamento"><AppIcon name="trash"/></button></div>}):<div className="empty">Nessun abbonamento. Usa il + per aggiungere una spesa pianificata come abbonamento.</div>}</article></section>;
 }
 
-function BudgetSection() {
-  const [month, setMonth] = useState("Luglio 2026");
-  return (
-    <section className="section-page">
-      <div className="budget-month-row"><label>Mese<select value={month} onChange={e=>setMonth(e.target.value)}><option>Giugno 2026</option><option>Luglio 2026</option><option>Agosto 2026</option></select></label><button className="outline">＋ Crea budget</button></div>
-      <div className="big-budget"><div><small>BUDGET TOTALI</small><h2>€ 1.030,00</h2></div><div><small>SPESO</small><h2>€ 642,00</h2></div><div><small>DISPONIBILE</small><h2 className="positive">€ 388,00</h2></div></div>
-      <div className="item-grid">{budgets.map(b => <article className="item-card budget-card" key={b.name}><div className="item-body"><small>BUDGET MENSILE</small><h3>{b.name}</h3><div className="progress"><i style={{ width: `${b.spent / b.limit * 100}%`, background: b.color }} /></div><strong>{money(b.spent)} <span>di {money(b.limit)}</span></strong></div></article>)}</div>
-    </section>
-  );
+function BudgetSection({ budgets, categories, transactions, refresh }: { budgets: MoneyBudget[]; categories: MoneyCategory[]; transactions: Transaction[]; refresh: () => Promise<void> }) {
+  const [newBudget,setNewBudget]=useState(false);
+  const month=toIsoDate(new Date()).slice(0,7);
+  const visible=budgets.filter(item=>item.month.startsWith(month));
+  const details=visible.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=transactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(month)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {item,category,spent};});
+  const total=details.reduce((sum,item)=>sum+item.item.amount,0);const spent=details.reduce((sum,item)=>sum+item.spent,0);
+  const remove=async(id:string)=>{if(!window.confirm("Eliminare questo budget?"))return;const {error}=await getSupabaseBrowserClient().from("budgets").delete().eq("id",id);if(error){alert(error.message);return;}await refresh();};
+  return <section className="section-page"><div className="budget-month-row"><label>Mese<select value={month} disabled><option>{new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date())}</option></select></label><button className="outline" onClick={()=>setNewBudget(true)}>＋ Crea budget</button></div><div className="big-budget"><div><small>BUDGET TOTALI</small><h2>{money(total)}</h2></div><div><small>SPESO</small><h2>{money(spent)}</h2></div><div><small>DISPONIBILE</small><h2 className="positive">{money(total-spent)}</h2></div></div><div className="item-grid">{details.length?details.map(({item,category,spent})=><article className="item-card budget-card" key={item.id}><div className="item-body"><small>BUDGET MENSILE</small><h3>{category?.name||"Categoria"}</h3><div className="progress"><i style={{width:`${Math.min(100,spent/item.amount*100)}%`,background:category?.color||"#7c65b5"}}/></div><strong>{money(spent)} <span>di {money(item.amount)}</span></strong></div><button onClick={()=>void remove(item.id)} aria-label="Elimina budget"><AppIcon name="trash"/></button></article>):<div className="empty panel">Nessun budget per questo mese.</div>}</div>{newBudget&&<BudgetModal categories={categories} month={`${month}-01`} close={()=>setNewBudget(false)} refresh={refresh}/>}</section>;
+}
+
+function BudgetModal({ categories, month, close, refresh }: { categories: MoneyCategory[]; month: string; close: () => void; refresh: () => Promise<void> }) {
+  const leaves=categories.filter(c=>c.kind==="expense"&&!categories.some(parent=>parent.parentId===c.id));
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const {data:{user}}=await getSupabaseBrowserClient().auth.getUser();if(!user)return;const {error}=await getSupabaseBrowserClient().from("budgets").insert({user_id:user.id,category_id:String(fd.get("category")),amount:parseItalianAmount(fd.get("amount")),month});if(error){alert(error.message);return;}await refresh();close();};
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>NUOVO BUDGET</small><h2>Crea budget</h2></div></div><label>Categoria<select name="category" required>{leaves.map(c=>{const parent=c.parentId?categories.find(p=>p.id===c.parentId):null;return <option key={c.id} value={c.id}>{parent?`${parent.name} › `:""}{c.name}</option>})}</select></label><label>Ammontare<input name="amount" type="text" inputMode="decimal" placeholder="0,00" required/></label><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer">Salva</button></div></form></div>;
 }
 
 function ReportSection() {
@@ -739,11 +771,12 @@ function TransactionsSection({ transactions, openTransaction }: { transactions: 
   );
 }
 
-function TransactionModal({ kind, close, add, accounts, categories, preset = "normal", defaultAccount, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
+function TransactionModal({ kind, close, add, accounts, cards, categories, preset = "normal", defaultAccount, cardId, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; cards: MoneyCard[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
   const usableAccounts = accounts.filter(account => !account.archived);
   const [from, setFrom] = useState(defaultAccount || usableAccounts[0]?.name || "");
   const [to, setTo] = useState(usableAccounts.find(account => account.name !== (defaultAccount || usableAccounts[0]?.name))?.name || "");
   const [selectedAccount, setSelectedAccount] = useState(defaultAccount || initial?.account || "");
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(cardId || initial?.cardId || null);
   const [accounted, setAccounted] = useState(initial?.accounted ?? false);
   const [planned, setPlanned] = useState(preset !== "normal");
   const [subscription, setSubscription] = useState(preset === "subscription");
@@ -757,6 +790,7 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
   const [voucherCount, setVoucherCount] = useState(1);
   const voucherValue = accounts.find(account => account.type === "meal_vouchers")?.voucherUnitValue || 8;
   const isTransfer = kind === "transfer";
+  const selectedCard = cards.find(card => card.id === selectedCardId);
   const isMealVoucher = selectedCategory.endsWith("› Buoni pasto");
   const pickerKind = refundSource ? "expense" : kind === "income" ? "income" : "expense";
   const categoryGroups = categories.filter(category => category.kind === pickerKind && !category.parentId).sort((a,b)=>a.name.localeCompare(b.name,"it")).map(root => ({
@@ -773,7 +807,7 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
     const fd = new FormData(e.currentTarget);
     const raw = parseItalianAmount(fd.get("amount"));
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
-    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${selectedCategory || refundSource.category}` : category, account: isTransfer ? from : selectedAccount, destinationAccountId: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
+    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${selectedCategory || refundSource.category}` : category, account: isTransfer ? from : selectedAccount, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
   };
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}>
     <div className={`modal-accent ${kind}`} />
@@ -791,7 +825,7 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
       <label>A<select value={to} onChange={e=>setTo(e.target.value)}>{usableAccounts.map(account=><option key={account.id} disabled={account.name===from}>{account.name}</option>)}</select><small>Saldo: {money(usableAccounts.find(account=>account.name===to)?.balance||0)}</small></label>
     </div> : <>
       <label>Categoria e sottocategoria<button type="button" className="category-select" onClick={()=>setCategoryOpen(true)}><span>⌘</span><b>{refundSource?`Rimborso · ${selectedCategory}`:selectedCategory}</b><i>⌄</i></button></label>
-      <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedAccount||"Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">Buoni pasto selezionato automaticamente</small>}</label>
+      <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedCard?.name || selectedAccount || "Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">Buoni pasto selezionato automaticamente</small>}</label>
     </>}
     <label>Data<button type="button" className="date-wheel-trigger" onClick={()=>setDateOpen(true)}><span>◫</span><b>{formatItalianDate(selectedDateISO)}</b><i>›</i></button></label>
     {!planned && <div className="modal-toggle"><div><b>Contabilizzata</b><span>Disattivala se il movimento deve ancora essere verificato</span></div><button type="button" className={accounted?"on":""} onClick={()=>setAccounted(x=>!x)}><i/></button></div>}
@@ -812,7 +846,7 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
         {categoryGroups.map(({root,children})=><div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:root.color,background:`${root.color}18`}}><AppIcon name={root.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expandedCategory===root.name?"up":"down"} size={15}/></i></button>{expandedCategory===root.name&&children.length>0&&<div className="subcategory-list">{children.map(child=><button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(child.name==="Buoni pasto")setSelectedAccount("Buoni pasto");setCategoryOpen(false);if(child.name!=="Buoni pasto")setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:child.color,background:`${child.color}18`}}><AppIcon name={child.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>)}</div>}</div>)}
       </div>
     </div>}
-    {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
+    {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setSelectedCardId(null);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}{cards.filter(card=>!card.archived).map(card=>{const linked=usableAccounts.find(account=>account.id===card.linkedAccountId);return <button type="button" key={card.id} onClick={()=>{setSelectedAccount(linked?.name||"");setSelectedCardId(card.id);setAccountOpen(false)}}><span><AppIcon name="card" size={18}/></span><b>{card.name}</b><strong>Carta di credito</strong></button>})}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
     {dateOpen && <div className="date-picker-layer"><div className="date-picker-card"><h3>Seleziona data</h3><input className="native-date-input" type="date" value={selectedDateISO} onChange={event=>setSelectedDateISO(event.target.value)}/><div className="date-picker-actions"><button type="button" onClick={()=>setDateOpen(false)}>Annulla</button><button type="button" onClick={()=>setDateOpen(false)}>Conferma</button></div></div></div>}
   </form></div>
 }
@@ -866,10 +900,13 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [active, setActive] = useState<Section>("Dashboard");
   const [mobileNav, setMobileNav] = useState(false);
-  const [modal, setModal] = useState<{ kind: ActionKind; preset: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction } | null>(null);
+  const [modal, setModal] = useState<{ kind: ActionKind; preset: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<MoneyAccount[]>([]);
   const [categories, setCategories] = useState<MoneyCategory[]>([]);
+  const [cards, setCards] = useState<MoneyCard[]>([]);
+  const [budgets, setBudgets] = useState<MoneyBudget[]>([]);
+  const [recurrences, setRecurrences] = useState<MoneyRecurrence[]>([]);
   const [dataBusy, setDataBusy] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -879,7 +916,10 @@ export default function Home() {
       const data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
       setAccounts(data.accounts);
       setCategories(data.categories);
-      setTransactions(data.transactions.map(row => transactionFromDatabase(row, data.accounts, data.categories)));
+      setCards(data.cards);
+      setBudgets(data.budgets);
+      setRecurrences(data.recurrences);
+      setTransactions(data.transactions.map(row => transactionFromDatabase(row, data.accounts, data.categories, data.cards)));
       setDataError("");
     } catch (error) {
       console.error(error);
@@ -905,6 +945,7 @@ export default function Home() {
       const { data: recurrence, error } = await supabase.from("recurrences").insert({
         user_id: user.id,
         account_id: account.id,
+        card_id: transaction.cardId ?? null,
         destination_account_id: transaction.kind === "transfer" ? destinationAccount?.id : null,
         category_id: category?.id ?? null,
         kind: transaction.kind === "transfer" ? "transfer" : transaction.amount < 0 ? "expense" : "income",
@@ -924,6 +965,7 @@ export default function Home() {
       user_id: user.id,
       kind: transaction.isRefund ? "refund" : transaction.kind === "transfer" ? "transfer" : transaction.amount < 0 ? "expense" : "income",
       account_id: account.id,
+      card_id: transaction.cardId ?? null,
       destination_account_id: transaction.kind === "transfer" ? destinationAccount?.id ?? null : null,
       category_id: category?.id ?? null,
       recurrence_id: recurrenceId,
@@ -1093,13 +1135,13 @@ export default function Home() {
         <Header active={active} />
         <div className="page-content">
           {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
-          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} transactions={transactions} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} onAdd={(kind,defaultAccount)=>setModal({kind,preset:"normal",defaultAccount})}/>}
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}
       {active === "Abbonamenti" && <button className="quick-main quick-standalone" onClick={()=>setModal({kind:"expense",preset:"subscription"})}>+</button>}
       {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:t.dueDate?"planned":"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>}
-      {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} accounts={accounts} categories={categories} close={()=>setModal(null)} add={saveTransaction}/>}
+      {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} cardId={modal.cardId} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} accounts={accounts} cards={cards} categories={categories} close={()=>setModal(null)} add={saveTransaction}/>}
     </div>
   );
 }
