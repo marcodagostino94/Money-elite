@@ -73,6 +73,9 @@ const budgets = [
 const money = (value: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
 
+const assetPath = (path: string) =>
+  `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
+
 const iconMap: Record<string, L.LucideIcon> = {
   dashboard:L.LayoutDashboard,balance:L.Scale,transactions:L.ArrowUpDown,planned:L.CalendarClock,
   subscriptions:L.Repeat2,accounts:L.WalletCards,card:L.CreditCard,budget:L.ChartNoAxesColumnIncreasing,
@@ -131,7 +134,7 @@ const categoryColor = (name: string) => {
 function Logo() {
   return (
     <div className="brand">
-      <img className="brand-mark" src="/money-elite-icon.png" alt="Money Elite" />
+      <img className="brand-mark" src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
       <div><strong>Money Elite</strong><small>Il tuo denaro, con stile.</small></div>
     </div>
   );
@@ -201,7 +204,7 @@ function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
     <main className="login-page">
       <section className="login-card">
         <div className="login-brand">
-          <img src="/money-elite-icon.png" alt="" />
+          <img src={assetPath("/money-elite-icon.png")} alt="" />
           <div><h1>Money Elite</h1><p>Il tuo denaro, con stile.</p></div>
         </div>
         <div className="login-heading">
@@ -249,7 +252,7 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
       {days.map(([date,value,height])=><div className="week-bar" key={date}><b>{money(value)}</b><i style={{height:`${height}%`}}/><span>{date}</span></div>)}
     </div>;
   }
-  const months = mode === "wealth" ? ["Ago","Ott","Dic","Feb","Apr","Giu","Lug"] : mode === "week" ? ["Mer","Gio","Ven","Sab","Dom","Lun","Oggi"] : ["1","5","10","15","20","25","29"];
+  const months = mode === "wealth" ? ["Ago","Ott","Dic","Feb","Apr","Giu","Lug"] : ["1","5","10","15","20","25","29"];
   return (
     <div className={`sparkline ${mode}`} aria-label="Grafico finanziario">
       <div className="chart-grid"><span /><span /><span /><span /></div>
@@ -789,7 +792,7 @@ export default function Home() {
 
   const choose = (s: Section) => { setActive(s); setMobileNav(false); };
   if (!authReady) {
-    return <main className="auth-loading"><img src="/money-elite-icon.png" alt="Money Elite"/><span>Caricamento sicuro…</span></main>;
+    return <main className="auth-loading"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><span>Caricamento sicuro…</span></main>;
   }
   if (!user) return <LoginScreen onSignedIn={setUser}/>;
 
