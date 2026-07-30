@@ -1,5 +1,4 @@
-import { createBrowserClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let client: SupabaseClient | undefined;
 
@@ -13,6 +12,14 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     throw new Error("Configurazione Supabase mancante.");
   }
 
-  client = createBrowserClient(url, publishableKey);
+  // L'app viene pubblicata come PWA statica su GitHub Pages: localStorage mantiene
+  // la sessione dell'utente e la invia anche alle richieste protette da RLS.
+  client = createClient(url, publishableKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
   return client;
 }
