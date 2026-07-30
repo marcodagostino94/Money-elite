@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatItalianDate, loadMoneyData, toIsoDate, type MoneyAccount, type MoneyCategory, type MoneyTransaction } from "@/lib/money/data";
 
 type Section =
   | "Dashboard"
@@ -19,7 +20,7 @@ type Section =
   | "Impostazioni";
 
 type Transaction = {
-  id: number;
+  id: string;
   label: string;
   category: string;
   account: string;
@@ -29,7 +30,30 @@ type Transaction = {
   color: string;
   accounted?: boolean;
   isRefund?: boolean;
-  refundOf?: number;
+  refundOf?: string;
+  accountId?: string;
+  destinationAccountId?: string | null;
+  categoryId?: string | null;
+  recurrenceId?: string | null;
+  dateISO?: string;
+  kind?: MoneyTransaction["kind"];
+  voucherCount?: number | null;
+  dueDate?: string | null;
+  confirmedAt?: string | null;
+  planned?: boolean;
+  subscription?: boolean;
+  automaticAccounting?: boolean;
+  frequency?: "daily" | "weekly" | "monthly" | "yearly";
+  intervalCount?: number;
+  occurrenceLimit?: number | null;
+};
+
+type AccountDraft = {
+  name: string;
+  type: MoneyAccount["type"];
+  openingBalance: number;
+  voucherUnitValue: number | null;
+  notes: string;
 };
 
 const nav: { label: Section; icon: string }[] = [
@@ -47,20 +71,20 @@ const nav: { label: Section; icon: string }[] = [
 ];
 
 const initialTransactions: Transaction[] = [
-  { id: 1, label: "Stipendio", category: "Entrate", account: "Conto principale", date: "28 Lug 2026", amount: 2450, icon: "income", color: "green" },
-  { id: 2, label: "Esselunga", category: "Spesa alimentare", account: "Carta Elite", date: "27 Lug 2026", amount: -86.4, icon: "groceries", color: "orange" },
-  { id: 3, label: "Netflix", category: "Abbonamenti", account: "Carta Elite", date: "26 Lug 2026", amount: -17.99, icon: "streaming", color: "purple" },
-  { id: 4, label: "Eni Plenitude", category: "Casa e utenze", account: "Conto principale", date: "25 Lug 2026", amount: -64.8, icon: "energy", color: "blue" },
-  { id: 5, label: "Pranzo", category: "Ristoranti", account: "Contanti", date: "24 Lug 2026", amount: -24.5, icon: "food", color: "red", accounted: false },
-  { id: 6, label: "Amazon", category: "Spese Personali › Amazon", account: "Revolut", date: "23 Lug 2026", amount: -50.99, icon: "package", color: "orange" },
-  { id: 7, label: "Carburante", category: "Trasporti › Carburante", account: "Carta Elite", date: "22 Lug 2026", amount: -62, icon: "fuel", color: "blue" },
-  { id: 8, label: "Farmacia", category: "Salute › Farmacia", account: "Conto principale", date: "21 Lug 2026", amount: -18.7, icon: "medical", color: "red" },
-  { id: 9, label: "Rimborso farmacia", category: "Rimborso · Salute › Farmacia", account: "Conto principale", date: "21 Lug 2026", amount: 10, icon: "refund", color: "green", isRefund: true, refundOf: 8 },
-  { id: 10, label: "Vodafone", category: "Casa › Vodafone", account: "Conto principale", date: "20 Lug 2026", amount: -29.9, icon: "technology", color: "blue" },
-  { id: 11, label: "Cinema", category: "Divertimento › Cinema", account: "Contanti", date: "19 Lug 2026", amount: -12, icon: "cinema", color: "purple" },
-  { id: 12, label: "Supermercato", category: "Alimenti › Supermercato", account: "Carta Elite", date: "18 Lug 2026", amount: -74.35, icon: "groceries", color: "orange" },
-  { id: 13, label: "Parcheggio", category: "Trasporti › Parcheggio", account: "Contanti", date: "17 Lug 2026", amount: -4.5, icon: "parking", color: "blue" },
-  { id: 14, label: "Spotify", category: "Abbonamenti › Spotify", account: "Revolut", date: "16 Lug 2026", amount: -10.99, icon: "music", color: "purple" },
+  { id: "demo-1", label: "Stipendio", category: "Entrate", account: "Conto principale", date: "28 Lug 2026", amount: 2450, icon: "income", color: "green" },
+  { id: "demo-2", label: "Esselunga", category: "Spesa alimentare", account: "Carta Elite", date: "27 Lug 2026", amount: -86.4, icon: "groceries", color: "orange" },
+  { id: "demo-3", label: "Netflix", category: "Abbonamenti", account: "Carta Elite", date: "26 Lug 2026", amount: -17.99, icon: "streaming", color: "purple" },
+  { id: "demo-4", label: "Eni Plenitude", category: "Casa e utenze", account: "Conto principale", date: "25 Lug 2026", amount: -64.8, icon: "energy", color: "blue" },
+  { id: "demo-5", label: "Pranzo", category: "Ristoranti", account: "Contanti", date: "24 Lug 2026", amount: -24.5, icon: "food", color: "red", accounted: false },
+  { id: "demo-6", label: "Amazon", category: "Spese Personali › Amazon", account: "Revolut", date: "23 Lug 2026", amount: -50.99, icon: "package", color: "orange" },
+  { id: "demo-7", label: "Carburante", category: "Trasporti › Carburante", account: "Carta Elite", date: "22 Lug 2026", amount: -62, icon: "fuel", color: "blue" },
+  { id: "demo-8", label: "Farmacia", category: "Salute › Farmacia", account: "Conto principale", date: "21 Lug 2026", amount: -18.7, icon: "medical", color: "red" },
+  { id: "demo-9", label: "Rimborso farmacia", category: "Rimborso · Salute › Farmacia", account: "Conto principale", date: "21 Lug 2026", amount: 10, icon: "refund", color: "green", isRefund: true, refundOf: "demo-8" },
+  { id: "demo-10", label: "Vodafone", category: "Casa › Vodafone", account: "Conto principale", date: "20 Lug 2026", amount: -29.9, icon: "technology", color: "blue" },
+  { id: "demo-11", label: "Cinema", category: "Divertimento › Cinema", account: "Contanti", date: "19 Lug 2026", amount: -12, icon: "cinema", color: "purple" },
+  { id: "demo-12", label: "Supermercato", category: "Alimenti › Supermercato", account: "Carta Elite", date: "18 Lug 2026", amount: -74.35, icon: "groceries", color: "orange" },
+  { id: "demo-13", label: "Parcheggio", category: "Trasporti › Parcheggio", account: "Contanti", date: "17 Lug 2026", amount: -4.5, icon: "parking", color: "blue" },
+  { id: "demo-14", label: "Spotify", category: "Abbonamenti › Spotify", account: "Revolut", date: "16 Lug 2026", amount: -10.99, icon: "music", color: "purple" },
 ];
 
 const budgets = [
@@ -71,14 +95,50 @@ const budgets = [
 ];
 
 const money = (value: number) =>
-  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+
+const addOneMonth = (isoDate: string) => {
+  const date = new Date(`${isoDate}T12:00:00`);
+  date.setMonth(date.getMonth()+1);
+  return toIsoDate(date);
+};
+
+const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[], categories: MoneyCategory[]): Transaction => {
+  const account = accounts.find(item => item.id === row.accountId);
+  const category = categories.find(item => item.id === row.categoryId);
+  const parent = category?.parentId ? categories.find(item => item.id === category.parentId) : null;
+  const categoryLabel = category ? (parent ? `${parent.name} › ${category.name}` : category.name) : row.kind === "transfer" ? "Trasferimento tra conti" : "Senza categoria";
+  const signedAmount = row.kind === "expense" || row.kind === "card_repayment" ? -row.amount : row.amount;
+  return {
+    id: row.id,
+    label: row.notes || (row.kind === "refund" ? `Rimborso ${category?.name ?? "spesa"}` : category?.name ?? (row.kind === "transfer" ? "Trasferimento fondi" : "Transazione")),
+    category: row.kind === "refund" ? `Rimborso · ${categoryLabel}` : categoryLabel,
+    account: account?.name ?? "Conto archiviato",
+    accountId: row.accountId,
+    destinationAccountId: row.destinationAccountId,
+    categoryId: row.categoryId,
+    recurrenceId: row.recurrenceId,
+    date: formatItalianDate(row.transactionDate),
+    dateISO: row.transactionDate,
+    dueDate: row.dueDate,
+    confirmedAt: row.confirmedAt,
+    amount: signedAmount,
+    icon: category?.icon || (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
+    color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" ? "blue" : "orange",
+    accounted: Boolean(row.accountedAt),
+    isRefund: row.kind === "refund",
+    refundOf: row.refundOfId ?? undefined,
+    kind: row.kind,
+    voucherCount: row.voucherCount,
+  };
+};
 
 const assetPath = (path: string) =>
   `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${path}`;
 
 const iconMap: Record<string, L.LucideIcon> = {
   dashboard:L.LayoutDashboard,balance:L.Scale,transactions:L.ArrowUpDown,planned:L.CalendarClock,
-  subscriptions:L.Repeat2,accounts:L.WalletCards,card:L.CreditCard,budget:L.ChartNoAxesColumnIncreasing,
+  subscriptions:L.Repeat2,repeat:L.RefreshCw,accounts:L.WalletCards,card:L.CreditCard,budget:L.ChartNoAxesColumnIncreasing,
   debts:L.HandCoins,report:L.ChartPie,settings:L.Settings,notification:L.Bell,income:L.ArrowDownLeft,
   expense:L.ArrowUpRight,transfer:L.ArrowLeftRight,groceries:L.ShoppingCart,streaming:L.MonitorPlay,
   energy:L.Zap,food:L.Utensils,bank:L.Landmark,cash:L.Banknote,savings:L.PiggyBank,voucher:L.Ticket,
@@ -235,9 +295,10 @@ function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
 
 function Header({ active }: { active: Section }) {
   const title = active === "Pianificate" ? "Transazioni pianificate" : active === "Debiti" ? "Debiti e crediti" : active;
+  const todayLabel = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date());
   return (
     <header>
-      <div><p>Mercoledì, 29 luglio 2026</p><h1>{title}</h1></div>
+      <div><p>{todayLabel}</p><h1>{title}</h1></div>
       <div className="header-actions">
         <button className="round" aria-label="Notifiche"><AppIcon name="notification" size={17}/><i /></button>
       </div>
@@ -264,69 +325,75 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
   );
 }
 
-function Dashboard({ transactions, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void; openTransaction: (t: Transaction) => void }) {
+function Dashboard({ transactions, accounts, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
   const [chart, setChart] = useState<"wealth" | "week" | "month">("wealth");
-  const today = "2026-07-29";
-  const [pending, setPending] = useState([
-    { id: 1, label: "Pranzi/Cene", category: "Alimenti", account: "Conto principale", info: "Alimenti · Conto principale", date: "29 Lug", fullDate: "29 Lug 2026", dueDate: "2026-07-29", amount: -42.5, accounted: false },
-    { id: 2, label: "Amazon", category: "Spese Personali", account: "Revolut", info: "Spese Personali · Revolut", date: "30 Lug", fullDate: "30 Lug 2026", dueDate: "2026-07-30", amount: -51.9, accounted: false },
-    { id: 3, label: "Assicurazione", category: "Trasporti", account: "Conto principale", info: "Trasporti · Conto principale", date: "31 Lug", fullDate: "31 Lug 2026", dueDate: "2026-07-31", amount: -39.25, accounted: true },
-  ]);
-  const duePending = pending.filter(item => item.dueDate <= today);
-  const confirmPending = (item: typeof pending[number]) => {
-    confirmTransaction({id:10000+item.id,label:item.label,category:item.category,account:item.account,date:item.fullDate,amount:item.amount,icon:item.accounted?"check":"planned",color:item.amount<0?"orange":"green",accounted:item.accounted});
-    setPending(x => x.filter(p => p.id !== item.id));
-  };
+  const today = toIsoDate(new Date());
+  const currentMonth = today.slice(0,7);
+  const monthTransactions = transactions.filter(transaction=>transaction.dateISO?.startsWith(currentMonth) && (!transaction.dueDate || transaction.confirmedAt));
+  const refunds = monthTransactions.filter(transaction=>transaction.isRefund).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const income = monthTransactions.filter(transaction=>transaction.amount>0&&!transaction.isRefund&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0);
+  const expenses = Math.max(0,Math.abs(monthTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0))-refunds);
+  const balance = income-expenses;
+  const visibleAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
+  const savings = visibleAccounts.filter(account=>account.type==="savings").reduce((sum,account)=>sum+account.balance,0);
+  const liquidity = visibleAccounts.filter(account=>account.type!=="savings").reduce((sum,account)=>sum+account.balance,0);
+  const wealth = liquidity+savings;
+  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
+  const weekExpenses = transactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
+  const monthExpenses = transactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const duePending = transactions.filter(item=>item.dueDate&&item.dueDate<=today&&!item.confirmedAt);
+  const futurePlanned = transactions.filter(item=>item.dueDate&&!item.confirmedAt&&item.dueDate>today).slice(0,3);
+  const recent = transactions.filter(item=>!item.dueDate||item.confirmedAt).slice(0,5);
   return (
     <>
       {duePending.length > 0 && <section className="pending-confirmations panel">
         <div className="pending-heading"><div><span className="pending-badge">●</span><div><h3>Da confermare</h3><p>{duePending.length} {duePending.length === 1 ? "transazione pianificata richiede" : "transazioni pianificate richiedono"} la tua conferma</p></div></div><button onClick={()=>setActive("Pianificate")}>Vedi pianificate →</button></div>
         <div className="pending-items">
-          {duePending.map(item=><div className="pending-item" key={item.id}><div className="pending-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.info} · {item.accounted?"contabilizzazione automatica":"da contabilizzare"}</span></div><strong>{money(item.amount)}</strong><button onClick={()=>confirmPending(item)}>Conferma</button></div>)}
+          {duePending.map(item=><div className="pending-item" key={item.id}><div className="pending-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><strong>{money(item.amount)}</strong><button onClick={()=>void confirmTransaction(item)}>Conferma</button></div>)}
         </div>
       </section>}
 
       <section className="hero-grid">
         <button className="balance-card dark heritage-link" onClick={()=>setActive("Conti")}>
           <div className="card-heading"><span>Patrimonio totale dei conti</span><AppIcon name="forward" size={18}/></div>
-          <h2>€ 12.840,65</h2>
-          <p className="up">↗ 4,2% <span>rispetto al mese scorso</span></p>
+          <h2>{money(wealth)}</h2>
           <div className="balance-breakdown">
-            <div><small>LIQUIDITÀ</small><b>€ 9.460,65</b></div>
-            <div><small>CARTA DI CREDITO</small><b className="card-debt">− € 1.146,30</b><em>Addebito 20 agosto</em></div>
-            <div><small>RISPARMI</small><b>€ 3.380,00</b></div>
+            <div><small>LIQUIDITÀ</small><b>{money(liquidity)}</b></div>
+            <div><small>CARTA DI CREDITO</small><b className="card-debt">{money(0)}</b></div>
+            <div><small>RISPARMI</small><b>{money(savings)}</b></div>
           </div>
         </button>
         <article className="balance-card balance-summary">
-          <div className="balance-visual"><div className="balance-ring"><div><strong>€ 1.763,70</strong><span>BILANCIO</span></div></div><small>LUGLIO 2026</small></div>
+          <div className="balance-visual"><div className="balance-ring"><div><strong>{money(balance)}</strong><span>BILANCIO</span></div></div><small>{new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date()).toUpperCase()}</small></div>
           <div className="balance-numbers">
-            <div><span><i className="income-dot"/>Entrate</span><strong>+ € 3.250,00</strong></div>
-            <div><span><i className="expense-dot"/>Uscite</span><strong>− € 1.486,30</strong></div>
-            <div className="total"><span>Totale</span><strong>+ € 1.763,70</strong></div>
+            <div><span><i className="income-dot"/>Entrate</span><strong>{money(income)}</strong></div>
+            <div><span><i className="expense-dot"/>Uscite</span><strong>{money(-expenses)}</strong></div>
+            <div className="total"><span>Totale</span><strong>{money(balance)}</strong></div>
           </div>
         </article>
       </section>
 
       <section className="panel insight-panel">
         <div className="chart-tabs">
-          <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>€ 12.840,65</b></button>
-          <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Spese ultimi 7 giorni</span><b>€ 278,49</b></button>
-          <button className={chart==="month"?"active":""} onClick={()=>setChart("month")}><span>Spese ultimi 30 giorni</span><b>€ 1.486,30</b></button>
+          <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>{money(wealth)}</b></button>
+          <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Spese ultimi 7 giorni</span><b>{money(weekExpenses)}</b></button>
+          <button className={chart==="month"?"active":""} onClick={()=>setChart("month")}><span>Spese ultimi 30 giorni</span><b>{money(monthExpenses)}</b></button>
         </div>
-        <div className="insight-chart"><div><small>{chart==="wealth"?"ULTIMI 12 MESI":chart==="week"?"ULTIMI 7 GIORNI":"ULTIMI 30 GIORNI"}</small><h3>{chart==="wealth"?"+ € 1.840,65":chart==="week"?"Media € 39,78 al giorno":"− 3,1% rispetto a giugno"}</h3></div><Sparkline mode={chart}/></div>
+        <div className="insight-chart"><div><small>{chart==="wealth"?"PATRIMONIO ATTUALE":chart==="week"?"ULTIMI 7 GIORNI":"ULTIMI 30 GIORNI"}</small><h3>{chart==="wealth"?money(wealth):chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(monthExpenses)}</h3></div><Sparkline mode={chart}/></div>
       </section>
 
       <section className="dashboard-stack">
         <article className="panel transactions dashboard-list">
           <div className="panel-title"><div><h3>Transazioni recenti</h3><p>Gli ultimi movimenti registrati</p></div><button className="text-button" onClick={() => setActive("Transazioni")}>Vedi tutte →</button></div>
           <div className="transaction-list">
-            {transactions.slice(0, 5).map((t) => <TransactionRow key={t.id} t={t} onOpen={openTransaction} />)}
+            {recent.map((t) => <TransactionRow key={t.id} t={t} onOpen={openTransaction} />)}
           </div>
         </article>
         <article className="panel planned-panel">
           <div className="panel-title"><div><h3>Transazioni pianificate</h3><p>I prossimi movimenti previsti</p></div><button className="text-button" onClick={() => setActive("Pianificate")}>Gestisci →</button></div>
           <div className="planned-grid">
-            {[["01","AGO","Affitto","Casa · Conto principale","− € 850,00"],["03","AGO","Fibra casa","Utenze · Carta Elite","− € 29,90"],["20","AGO","Addebito Carta Elite","Carta di credito","− € 1.146,30"]].map(x=><div className="planned-item" key={x[2]}><div className="planned-date"><b>{x[0]}</b><span>{x[1]}</span></div><div><b>{x[2]}</b><span>{x[3]}</span></div><strong>{x[4]}</strong></div>)}
+            {futurePlanned.map(item=><button className="planned-item" key={item.id} onClick={()=>openTransaction(item)}><div className="planned-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><strong>{money(item.amount)}</strong></button>)}
           </div>
         </article>
         <article className="panel budget-panel dashboard-budget">
@@ -381,7 +448,7 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
-function GenericSection({ section, onAdd }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string) => void }) {
+function GenericSection({ section, onAdd, accounts, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string) => void; accounts: MoneyAccount[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void }) {
   const cards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
     Conti: [
       { name: "Conto principale", sub: "Banca ·•• 4832", value: "€ 8.940,65", icon: "B" },
@@ -401,9 +468,9 @@ function GenericSection({ section, onAdd }: { section: Exclude<Section, "Dashboa
   if (section === "Report") return <ReportSection />;
   if (section === "Impostazioni") return <SettingsSection />;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} />;
-  if (section === "Pianificate") return <PlannedSection />;
+  if (section === "Pianificate") return <PlannedSection transactions={transactions} openTransaction={openTransaction}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection />;
-  if (section === "Conti") return <AccountsSection onAdd={onAdd}/>;
+  if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} openTransaction={openTransaction}/>;
   if (section === "Carte di credito") return <CreditCardsSection onAdd={onAdd}/>;
   const info = sectionData[section];
   return (
@@ -419,6 +486,38 @@ function GenericSection({ section, onAdd }: { section: Exclude<Section, "Dashboa
       </div>
     </section>
   );
+}
+
+function AccountModal({ account, close, save }: { account?: MoneyAccount; close: () => void; save: (draft: AccountDraft, account?: MoneyAccount) => Promise<void> }) {
+  const [name, setName] = useState(account?.name ?? "");
+  const [type, setType] = useState<MoneyAccount["type"]>(account?.type ?? "bank");
+  const [openingBalance, setOpeningBalance] = useState(account?.openingBalance ?? 0);
+  const [voucherUnitValue, setVoucherUnitValue] = useState(account?.voucherUnitValue ?? 8);
+  const [notes, setNotes] = useState(account?.notes ?? "");
+  const [busy, setBusy] = useState(false);
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type,openingBalance,voucherUnitValue:type==="meal_vouchers"?voucherUnitValue:null,notes},account);setBusy(false)}}>
+    <div className="modal-title"><div><small>{account?"MODIFICA CONTO":"NUOVO CONTO"}</small><h2>{account?account.name:"Crea nuovo conto"}</h2></div></div>
+    <label>Nome<input required value={name} onChange={event=>setName(event.target.value)} placeholder="Es. Conto principale"/></label>
+    <label>Tipo di conto<select value={type} onChange={event=>setType(event.target.value as MoneyAccount["type"])} disabled={Boolean(account)}><option value="bank">Conto corrente</option><option value="cash">Contanti</option><option value="savings">Conto deposito</option><option value="meal_vouchers">Buoni pasto</option><option value="other">Altro</option></select></label>
+    {type==="meal_vouchers"?<><label>Valore di ogni buono<div className="amount-input"><span>€</span><input type="number" inputMode="decimal" min="0.01" step="0.01" value={voucherUnitValue} onChange={event=>setVoucherUnitValue(Number(event.target.value))}/></div></label><label>Saldo iniziale<input type="number" inputMode="numeric" min="0" step="1" value={Math.round(openingBalance/voucherUnitValue)||0} onChange={event=>setOpeningBalance(Number(event.target.value)*voucherUnitValue)}/></label></>:<label>Importo iniziale<input type="number" inputMode="decimal" step="0.01" value={openingBalance} onChange={event=>setOpeningBalance(Number(event.target.value))}/></label>}
+    <label>Note<input value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Opzionale"/></label>
+    <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer" disabled={busy}>{busy?"Salvataggio…":"Salva"}</button></div>
+  </form></div>;
+}
+
+function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void; accounts: MoneyAccount[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void }) {
+  const [editor, setEditor] = useState<MoneyAccount | "new" | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const activeAccounts = accounts.filter(account=>!account.archived);
+  const archivedAccounts = accounts.filter(account=>account.archived);
+  const visibleTotal = activeAccounts.filter(account=>!account.hidden).reduce((sum,account)=>sum+account.balance,0);
+  const detail = accounts.find(account=>account.id===detailId);
+  if(detail) {
+    const rows = transactions.filter(transaction=>transaction.accountId===detail.id || transaction.account===detail.name);
+    return <section className="section-page"><div className="inner-page-header"><button onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CONTO · {new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date())}</small><h2>{detail.name}</h2></div></div><div className="account-detail-summary"><div className="item-icon real-icon"><AppIcon name={detail.icon}/></div><div className="account-balance-pair"><div><small>SALDO ALLA DATA DI OGGI</small><strong>{money(detail.balance)}</strong></div><div><small>SALDO PREVISTO A FINE MESE</small><strong>{money(detail.balance)}</strong></div>{detail.type==="meal_vouchers"&&<span>{detail.voucherCount} buoni da {money(detail.voucherUnitValue||0)}</span>}</div></div><article className="panel month-transactions">{rows.length?rows.map(transaction=><TransactionRow key={transaction.id} t={transaction} onOpen={openTransaction}/>):<div className="empty">Nessuna transazione nel mese corrente.</div>}</article>{!detail.archived&&<QuickActions openAction={kind=>onAdd(kind,detail.name)}/>}</section>;
+  }
+  return <section className="section-page"><div className="accounts-total"><div><small>TOTALE DEI CONTI VISIBILI</small></div><strong>{money(visibleTotal)}</strong></div><div className="accounts-list">{activeAccounts.map(account=><article className={`account-row ${account.type==="meal_vouchers"?"voucher-account":""} ${account.hidden?"hidden-account":""}`} key={account.id} onClick={()=>setDetailId(account.id)}><div className="item-icon real-icon"><AppIcon name={account.icon}/></div><div><h3>{account.name}</h3><strong>{account.hidden?"Saldo nascosto":money(account.balance)}</strong>{account.type==="meal_vouchers"&&!account.hidden&&<div className="voucher-meter"><i style={{width:"60%"}}/><span>{account.voucherCount} buoni</span></div>}</div><button className="eye-button modern" onClick={event=>{event.stopPropagation();void onToggleAccount(account)}}><AppIcon name={account.hidden?"eyeOff":"eye"} size={18}/></button><button onClick={event=>{event.stopPropagation();onAdd("transfer",account.name)}}><AppIcon name="transfer" size={18}/></button><button onClick={event=>{event.stopPropagation();setMenu(menu===account.id?null:account.id)}}><AppIcon name="more" size={19}/></button>{menu===account.id&&<div className="account-menu" onClick={event=>event.stopPropagation()}><button onClick={()=>onAdd("income",account.name)}><AppIcon name="income"/> Aggiungi entrata</button><button onClick={()=>onAdd("expense",account.name)}><AppIcon name="expense"/> Aggiungi uscita</button><button onClick={()=>{setEditor(account);setMenu(null)}}><AppIcon name="edit"/> Modifica conto</button><button onClick={()=>void onArchiveAccount(account)}><AppIcon name="archive"/> Archivia conto</button><button className="danger" onClick={()=>void onDeleteAccount(account)}><AppIcon name="trash"/> Elimina conto</button></div>}</article>)}</div>{archivedAccounts.length>0&&<div className="archived-accounts"><div><b>Conti archiviati</b></div>{archivedAccounts.map(account=><button key={account.id} onClick={()=>setDetailId(account.id)}><span><AppIcon name={account.icon}/></span><div><b>{account.name}</b><small>Sola consultazione</small></div><strong>{money(account.balance)}</strong></button>)}</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor("new")}><AppIcon name="plus" size={22}/></button>{editor&&<AccountModal account={editor==="new"?undefined:editor} close={()=>setEditor(null)} save={async(draft,account)=>{await onSaveAccount(draft,account);setEditor(null)}}/>}</section>;
 }
 
 function AccountsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void }) {
@@ -442,7 +541,7 @@ function AccountsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?:
     const account = accounts.find(a=>a.name===detailAccount)!;
     const monthEndDelta = detailAccount==="Conto principale" ? -679.9 : detailAccount==="Carta Elite" ? -29.9 : detailAccount==="Buoni pasto" ? 24 : 0;
     const rows = detailAccount==="Buoni pasto"
-      ? [{id:91,label:"Ricarica buoni pasto",category:"Reddito › Buoni pasto",account:"Buoni pasto",date:"29 Lug 2026",amount:160,icon:"voucher",color:"green"} as Transaction,{id:92,label:"Pranzi/Cene",category:"Alimenti › Buoni pasto",account:"Buoni pasto",date:"28 Lug 2026",amount:-16,icon:"food",color:"orange"} as Transaction]
+      ? [{id:"demo-91",label:"Ricarica buoni pasto",category:"Reddito › Buoni pasto",account:"Buoni pasto",date:"29 Lug 2026",amount:160,icon:"voucher",color:"green"} as Transaction,{id:"demo-92",label:"Pranzi/Cene",category:"Alimenti › Buoni pasto",account:"Buoni pasto",date:"28 Lug 2026",amount:-16,icon:"food",color:"orange"} as Transaction]
       : initialTransactions.filter(t=>t.account===detailAccount);
     return <section className="section-page"><div className="inner-page-header"><button onClick={()=>setDetailAccount(null)}><AppIcon name="back"/></button><div><small>CONTO · LUGLIO 2026</small><h2>{detailAccount}</h2><p>Transazioni del mese corrente</p></div></div><div className="account-detail-summary"><div className="item-icon real-icon"><AppIcon name={account.icon}/></div><div className="account-balance-pair"><div><small>SALDO ALLA DATA DI OGGI</small><strong>{money(account.balance)}</strong></div><div><small>SALDO PREVISTO AL 31 LUGLIO</small><strong>{money(account.balance+monthEndDelta)}</strong></div>{account.voucher&&<span>18 buoni da {money(8)}</span>}</div></div><div className="future-balance-note"><AppIcon name="planned" size={16}/><span>Il saldo previsto comprende anche le transazioni inserite con una data futura entro la fine del mese.</span></div><article className="panel month-transactions">{rows.length?rows.map(t=><TransactionRow key={t.id} t={t}/>):<div className="empty">Nessuna transazione per questo conto nel mese corrente.</div>}</article><QuickActions openAction={kind=>onAdd(kind,detailAccount)}/></section>;
   }
@@ -508,9 +607,11 @@ function BalanceMonthDetail({ detail }: { detail: "income" | "expense" }) {
   return <div className="category-detail"><div className={`large-donut ${income?"income":"expense"}`}><div><strong>{income?"€ 3.250,00":"€ 1.486,30"}</strong><span>{income?"Entrate":"Uscite"}</span></div></div>{rows.map((r,i)=><div className="legend-row" key={r[0]}><i className={`legend-c${i}`}/><b>{r[0]}</b><span>{r[2]}</span><strong>{r[1]}</strong></div>)}</div>
 }
 
-function PlannedSection() {
-  const items = [["30 LUG","Bolletta condominio","Casa","Casa · Conto principale","− € 49,09"],["31 LUG","Assicurazione moto","Trasporti","Trasporti · Conto principale","− € 39,25"],["31 LUG","Trasferimento risparmi","Trasferimento","Giroconto","€ 200,00"],["04 AGO","Bolletta energetica","Luce e Gas","Casa · Conto principale","− € 173,02"],["06 AGO","Stipendio","Reddito","Reddito · Conto principale","+ € 2.450,00"]] as const;
-  return <section className="section-page"><article className="panel schedule-list">{items.map((x)=><div className="schedule-row" key={x[1]}><div className="schedule-icon" style={{color:x[2]==="Trasferimento"?"#4f8ca8":categoryColor(x[2]),background:`${x[2]==="Trasferimento"?"#4f8ca8":categoryColor(x[2])}18`}}><AppIcon name={x[2]==="Trasferimento"?"transfer":categoryIcon(x[2])}/></div><div><b>{x[1]}</b><span>{x[3]}</span></div><div><strong>{x[4]}</strong><span>{x[0]}</span></div><i className={x[2]==="Trasferimento"?"transfer-line":x[2]==="Reddito"?"income-line":"expense-line"}/></div>)}</article><div className="schedule-summary"><span>Questo mese <b>− € 348,34</b></span><span>Mese prossimo <b className="positive">+ € 1.010,43</b></span></div></section>
+function PlannedSection({transactions,openTransaction}:{transactions:Transaction[];openTransaction:(transaction:Transaction)=>void}) {
+  const items=transactions.filter(transaction=>transaction.dueDate&&!transaction.confirmedAt).sort((a,b)=>(a.dueDate||"").localeCompare(b.dueDate||""));
+  const currentMonth=toIsoDate(new Date()).slice(0,7);
+  const monthTotal=items.filter(item=>item.dueDate?.startsWith(currentMonth)).reduce((sum,item)=>sum+item.amount,0);
+  return <section className="section-page"><article className="panel schedule-list">{items.length?items.map(item=><button className="schedule-row" key={item.id} onClick={()=>openTransaction(item)}><div className="schedule-icon" style={{color:categoryColor(item.category),background:`${categoryColor(item.category)}18`}}><AppIcon name={item.icon}/></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><div><strong>{money(item.amount)}</strong><span>{item.date}</span></div><i className={item.kind==="transfer"?"transfer-line":item.amount>0?"income-line":"expense-line"}/></button>):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div></section>
 }
 
 function SubscriptionsSection() {
@@ -627,23 +728,30 @@ function TransactionsSection({ transactions, openTransaction }: { transactions: 
   );
 }
 
-function TransactionModal({ kind, close, add, preset = "normal", defaultAccount, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
-  const [from, setFrom] = useState(defaultAccount || "Contanti");
-  const [to, setTo] = useState("Conto principale");
+function TransactionModal({ kind, close, add, accounts, categories, preset = "normal", defaultAccount, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
+  const usableAccounts = accounts.filter(account => !account.archived);
+  const [from, setFrom] = useState(defaultAccount || usableAccounts[0]?.name || "");
+  const [to, setTo] = useState(usableAccounts.find(account => account.name !== (defaultAccount || usableAccounts[0]?.name))?.name || "");
   const [selectedAccount, setSelectedAccount] = useState(defaultAccount || initial?.account || "");
   const [accounted, setAccounted] = useState(initial?.accounted ?? false);
   const [planned, setPlanned] = useState(preset !== "normal");
   const [subscription, setSubscription] = useState(preset === "subscription");
   const [autoAccounted, setAutoAccounted] = useState(true);
-  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(!initial && !refundSource && kind !== "transfer");
+  const [accountOpen, setAccountOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(initial?.date || "29 Luglio 2026");
+  const [selectedDateISO, setSelectedDateISO] = useState(initial?.dateISO || toIsoDate(new Date()));
   const [expandedCategory, setExpandedCategory] = useState(kind === "income" ? "Reddito" : "Alimenti");
   const [selectedCategory, setSelectedCategory] = useState(initial?.category || (kind === "income" ? "Reddito › Stipendio" : "Alimenti › Pranzi/Cene"));
   const [voucherCount, setVoucherCount] = useState(1);
-  const voucherValue = 8;
+  const voucherValue = accounts.find(account => account.type === "meal_vouchers")?.voucherUnitValue || 8;
   const isTransfer = kind === "transfer";
   const isMealVoucher = selectedCategory.endsWith("› Buoni pasto");
+  const pickerKind = refundSource ? "expense" : kind === "income" ? "income" : "expense";
+  const categoryGroups = categories.filter(category => category.kind === pickerKind && !category.parentId).sort((a,b)=>a.name.localeCompare(b.name,"it")).map(root => ({
+    root,
+    children: categories.filter(category => category.parentId === root.id).sort((a,b)=>a.name.localeCompare(b.name,"it")),
+  }));
   const labels = kind === "expense"
     ? { eyebrow: "NUOVA USCITA", title: "Registra un’uscita", save: "Salva uscita", planned: "Uscita pianificata" }
     : kind === "income"
@@ -654,29 +762,27 @@ function TransactionModal({ kind, close, add, preset = "normal", defaultAccount,
     const fd = new FormData(e.currentTarget);
     const raw = Number(fd.get("amount"));
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
-    add({ id: editing && initial ? initial.id : Date.now(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${refundSource.category}` : category, account: isTransfer ? from : String(fd.get("account")), date: selectedDate.replace("Luglio","Lug"), amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id });
-    close();
+    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${selectedCategory || refundSource.category}` : category, account: isTransfer ? from : selectedAccount, destinationAccountId: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
   };
-  return <div className="modal-backdrop" onMouseDown={close}><form className="modal" onSubmit={submit} onMouseDown={e=>e.stopPropagation()}>
+  return <div className="modal-backdrop"><form className="modal" onSubmit={submit}>
     <div className={`modal-accent ${kind}`} />
-    <div className="modal-title"><div><small>{refundSource?"NUOVO RIMBORSO":editing?"MODIFICA TRANSAZIONE":initial?"DUPLICA TRANSAZIONE":labels.eyebrow}</small><h2>{refundSource?"Registra il rimborso":editing?"Modifica la transazione":initial?"Controlla la copia":labels.title}</h2></div><button type="button" onClick={close}>×</button></div>
+    <div className="modal-title"><div><small>{refundSource?"NUOVO RIMBORSO":editing?"MODIFICA TRANSAZIONE":initial?"DUPLICA TRANSAZIONE":labels.eyebrow}</small><h2>{refundSource?"Registra il rimborso":editing?"Modifica la transazione":initial?"Controlla la copia":labels.title}</h2></div></div>
     {refundSource&&<div className="refund-source"><span>Spesa originale</span><b>{refundSource.label}</b><small>{money(Math.abs(refundSource.amount))} · {refundSource.account} · {refundSource.date}</small></div>}
     {isMealVoucher ? <div className="transaction-voucher-box">
       <div className="voucher-explainer"><span className="real-icon"><AppIcon name="voucher" size={21}/></span><div><b>{kind==="income"?"Carica buoni pasto":"Utilizza buoni pasto"}</b><small>Il valore unitario impostato nel conto è {money(voucherValue)}.</small></div></div>
       <label>Numero di buoni<input name="voucherCount" type="number" min="1" step="1" value={voucherCount} onChange={e=>setVoucherCount(Math.max(1,Number(e.target.value)))} autoFocus/></label>
       <input name="amount" type="hidden" value={voucherCount*voucherValue}/>
       <div className="voucher-calculation"><span>{voucherCount} × {money(voucherValue)}</span><strong>{money(voucherCount*voucherValue)}</strong></div>
-    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="number" min="0.01" step="0.01" required placeholder="0,00" defaultValue={initial?Math.abs(initial.amount):undefined} autoFocus/></div></label>}
+    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="number" inputMode="decimal" min="0.01" step="0.01" required placeholder="0,00" defaultValue={initial?Math.abs(initial.amount):undefined} autoFocus/></div></label>}
     {isTransfer ? <div className="transfer-fields">
-      <label>Da<select value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value===to)setTo(e.target.value==="Contanti"?"Conto principale":"Contanti")}}><option>Contanti</option><option>Conto principale</option><option>Risparmi</option></select><small>Disponibile: {from==="Contanti"?"€ 520,00":from==="Risparmi"?"€ 3.380,00":"€ 8.940,65"}</small></label>
+      <label>Da<select value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value===to)setTo(usableAccounts.find(account=>account.name!==e.target.value)?.name||"")}}>{usableAccounts.map(account=><option key={account.id}>{account.name}</option>)}</select><small>Disponibile: {money(usableAccounts.find(account=>account.name===from)?.balance||0)}</small></label>
       <div className="transfer-arrow">↓</div>
-      <label>A<select value={to} onChange={e=>setTo(e.target.value)}><option disabled={from==="Contanti"}>Contanti</option><option disabled={from==="Conto principale"}>Conto principale</option><option disabled={from==="Risparmi"}>Risparmi</option></select><small>Saldo: {to==="Contanti"?"€ 520,00":to==="Risparmi"?"€ 3.380,00":"€ 8.940,65"}</small></label>
-      <p className="transfer-note">Il giroconto non modifica entrate, uscite o budget.</p>
+      <label>A<select value={to} onChange={e=>setTo(e.target.value)}>{usableAccounts.map(account=><option key={account.id} disabled={account.name===from}>{account.name}</option>)}</select><small>Saldo: {money(usableAccounts.find(account=>account.name===to)?.balance||0)}</small></label>
     </div> : <>
-      <label>Categoria e sottocategoria<button type="button" className="category-select" onClick={()=>!refundSource&&setCategoryOpen(true)} disabled={Boolean(refundSource)}><span>⌘</span><b>{refundSource?`Rimborso · ${refundSource.category}`:selectedCategory}</b><i>{refundSource?"":"⌄"}</i></button></label>
-      <label>Conto{isMealVoucher&&<input type="hidden" name="account" value="Buoni pasto"/>}<select name={isMealVoucher?undefined:"account"} value={selectedAccount} onChange={e=>setSelectedAccount(e.target.value)} disabled={isMealVoucher}><option value="" disabled>Seleziona conto</option><option>Conto principale</option><option>Carta Elite</option><option>Contanti</option><option>Risparmi</option><option>Buoni pasto</option></select>{isMealVoucher&&<small className="auto-account-note">Selezionato automaticamente in base alla categoria</small>}</label>
+      <label>Categoria e sottocategoria<button type="button" className="category-select" onClick={()=>setCategoryOpen(true)}><span>⌘</span><b>{refundSource?`Rimborso · ${selectedCategory}`:selectedCategory}</b><i>⌄</i></button></label>
+      <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedAccount||"Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">Buoni pasto selezionato automaticamente</small>}</label>
     </>}
-    <label>Data<button type="button" className="date-wheel-trigger" onClick={()=>setDateOpen(true)}><span>◫</span><b>{selectedDate}</b><i>›</i></button></label>
+    <label>Data<button type="button" className="date-wheel-trigger" onClick={()=>setDateOpen(true)}><span>◫</span><b>{formatItalianDate(selectedDateISO)}</b><i>›</i></button></label>
     {!planned && <div className="modal-toggle"><div><b>Contabilizzata</b><span>Disattivala se il movimento deve ancora essere verificato</span></div><button type="button" className={accounted?"on":""} onClick={()=>setAccounted(x=>!x)}><i/></button></div>}
     {!refundSource&&<div className="modal-toggle"><div><b>{labels.planned}</b><span>Programma il movimento per una data futura</span></div><button type="button" className={planned?"on":""} onClick={()=>setPlanned(x=>!x)}><i/></button></div>}
     {planned && <div className="planning-details">
@@ -692,26 +798,15 @@ function TransactionModal({ kind, close, add, preset = "normal", defaultAccount,
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><button type="button" onClick={()=>setCategoryOpen(false)}>×</button></div>
       <div className="category-search"><AppIcon name="search" size={15}/><input placeholder="Cerca categoria..." /></div>
       <div className="category-tree">
-        {(kind==="income" ? [
-          ["Guadagni",["Regalo","Rimborso"]],["Proventi Finanziari",[]],["Reddito",["730","Altri lavori","Buoni pasto","Stipendio","Straordinari"]],
-        ] : [
-          ["Abbonamenti",["App Store","Finanziamenti","iCloud","Sky e Netflix","Spotify"]],
-          ["Alimenti",["Bar","Buoni pasto","Drink","Pranzi/Cene","Supermercato"]],
-          ["Casa",["Arredamento","Condominio","Gas","Giardino","Lavori","Luce","Luce e Gas","Prodotti Casa","Pulizie","Riscaldamento","Rifiuti","Vodafone"]],
-          ["Divertimento",["Cinema","Discoteca","Divertimento","Mare"]],
-          ["Salute",["Farmacia","Lenti a contatto","Medici","Sport"]],
-          ["Spese Personali",["Abbigliamento","Amazon","Cosmesi","Cura Personale","Regali","Scommesse","Tabacchi","Tecnologia"]],
-          ["Tasse",["Multe","Tasse"]],
-          ["Trasporti",["Automobile","Box","Carburante","Noleggio","Parcheggio","Scooter","Telepass","Trasporti pubblici"]],
-          ["Viaggi",["Divertimento Viaggi","Hotel","Pranzi/Cene Viaggi","Trasporti Viaggi"]],
-        ]).map(([group,children])=><div className="category-group" key={group as string}><button type="button" onClick={()=>{if((children as string[]).length===0){setSelectedCategory(group as string);setCategoryOpen(false)}else setExpandedCategory(expandedCategory===group?"":group as string)}}><span className="real-icon" style={{color:categoryColor(group as string),background:`${categoryColor(group as string)}18`}}><AppIcon name={categoryIcon(group as string)} size={16}/></span><b>{group}</b><i><AppIcon name={(children as string[]).length===0?"forward":expandedCategory===group?"up":"down"} size={15}/></i></button>{expandedCategory===group&&(children as string[]).length>0&&<div className="subcategory-list">{(children as string[]).map((child)=><button type="button" className="subcategory-choice" key={child} onClick={()=>{setSelectedCategory(`${group} › ${child}`);if(child==="Buoni pasto")setSelectedAccount("Buoni pasto");setCategoryOpen(false)}}><span className="sub-symbol real-icon" style={{color:categoryColor(child),background:`${categoryColor(child)}18`}}><AppIcon name={categoryIcon(child)} size={16}/></span><div><b>{child}</b><small>Sottocategoria di {group}</small></div><i><AppIcon name="forward" size={14}/></i></button>)}</div>}</div>)}
+        {categoryGroups.map(({root,children})=><div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:root.color,background:`${root.color}18`}}><AppIcon name={root.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expandedCategory===root.name?"up":"down"} size={15}/></i></button>{expandedCategory===root.name&&children.length>0&&<div className="subcategory-list">{children.map(child=><button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(child.name==="Buoni pasto")setSelectedAccount("Buoni pasto");setCategoryOpen(false);if(child.name!=="Buoni pasto")setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:child.color,background:`${child.color}18`}}><AppIcon name={child.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>)}</div>}</div>)}
       </div>
     </div>}
-    {dateOpen && <div className="date-picker-layer"><div className="date-picker-card"><h3>Seleziona data</h3><div className="date-wheels"><div>{["27","28","29","30","31"].map(x=><span className={x==="29"?"selected":""} key={x}>{x}</span>)}</div><div>{["Maggio","Giugno","Luglio","Agosto","Settembre"].map(x=><span className={x==="Luglio"?"selected":""} key={x}>{x}</span>)}</div><div>{["2024","2025","2026","2027","2028"].map(x=><span className={x==="2026"?"selected":""} key={x}>{x}</span>)}</div></div><div className="date-picker-actions"><button type="button" onClick={()=>setDateOpen(false)}>Annulla</button><button type="button" onClick={()=>{setSelectedDate("29 Luglio 2026");setDateOpen(false)}}>Conferma</button></div></div></div>}
+    {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
+    {dateOpen && <div className="date-picker-layer"><div className="date-picker-card"><h3>Seleziona data</h3><input className="native-date-input" type="date" value={selectedDateISO} onChange={event=>setSelectedDateISO(event.target.value)}/><div className="date-picker-actions"><button type="button" onClick={()=>setDateOpen(false)}>Annulla</button><button type="button" onClick={()=>setDateOpen(false)}>Conferma</button></div></div></div>}
   </form></div>
 }
 
-function TransactionDetail({ transaction, close, account, duplicate, edit, remove, refund }: {
+function TransactionDetail({ transaction, close, account, duplicate, edit, remove, refund, skip, repeatNow }: {
   transaction: Transaction;
   close: () => void;
   account: () => void;
@@ -719,17 +814,22 @@ function TransactionDetail({ transaction, close, account, duplicate, edit, remov
   edit: () => void;
   remove: () => void;
   refund: () => void;
+  skip?: () => void;
+  repeatNow?: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const canRefund = transaction.amount < 0 && !transaction.isRefund;
-  return <div className="modal-backdrop" onMouseDown={close}>
-    <article className="transaction-detail" onMouseDown={e=>e.stopPropagation()}>
+  const isPlanned = Boolean(transaction.dueDate && !transaction.confirmedAt);
+  return <div className="modal-backdrop">
+    <article className="transaction-detail">
       <div className="transaction-detail-head">
         <button onClick={close} aria-label="Chiudi"><AppIcon name="back"/></button>
         <div><small>TRANSAZIONE</small><h2>{transaction.label}</h2></div>
         <button onClick={()=>setMenu(x=>!x)} aria-label="Altre azioni"><AppIcon name="more"/></button>
         {menu&&<div className="transaction-detail-menu">
-          {canRefund&&<button onClick={refund}><AppIcon name="refund" size={16}/> Rimborso</button>}
+          {isPlanned&&skip&&<button onClick={skip}><AppIcon name="planned" size={16}/> Salta ripetizione</button>}
+          {isPlanned&&repeatNow&&<button onClick={repeatNow}><AppIcon name="repeat" size={16}/> Ripeti ora</button>}
+          {canRefund&&!isPlanned&&<button onClick={refund}><AppIcon name="refund" size={16}/> Rimborso</button>}
           <button onClick={duplicate}><AppIcon name="plus" size={16}/> Duplica transazione</button>
           <button onClick={edit}><AppIcon name="edit" size={16}/> Modifica transazione</button>
           <button className="danger" onClick={remove}><AppIcon name="trash" size={16}/> Elimina transazione</button>
@@ -744,7 +844,7 @@ function TransactionDetail({ transaction, close, account, duplicate, edit, remov
         <div><span>Data</span><b>{transaction.date}</b></div>
         <div><span>Stato</span><b>{transaction.accounted===false?"Da contabilizzare":"Contabilizzata"}</b></div>
       </div>
-      {transaction.accounted===false&&<button className="account-transaction" onClick={account}><AppIcon name="check" size={17}/> Contabilizza</button>}
+      {transaction.accounted===false&&!isPlanned&&<button className="account-transaction" onClick={account}><AppIcon name="check" size={17}/> Contabilizza</button>}
       {transaction.isRefund&&<p className="refund-note">Questo movimento riduce il totale delle spese e non viene conteggiato tra le entrate.</p>}
     </article>
   </div>;
@@ -756,21 +856,94 @@ export default function Home() {
   const [active, setActive] = useState<Section>("Dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<{ kind: ActionKind; preset: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction } | null>(null);
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [accounts, setAccounts] = useState<MoneyAccount[]>([]);
+  const [categories, setCategories] = useState<MoneyCategory[]>([]);
+  const [dataBusy, setDataBusy] = useState(true);
+  const [dataError, setDataError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const saveTransaction = (transaction: Transaction) => {
-    setTransactions(rows => modal?.editing ? rows.map(row=>row.id===transaction.id?transaction:row) : [transaction,...rows]);
+  const refreshData = async (activeUser = user) => {
+    if (!activeUser) return;
+    try {
+      const data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
+      setAccounts(data.accounts);
+      setCategories(data.categories);
+      setTransactions(data.transactions.map(row => transactionFromDatabase(row, data.accounts, data.categories)));
+      setDataError("");
+    } catch (error) {
+      console.error(error);
+      setDataError("Non è stato possibile sincronizzare i dati. Controlla la connessione e riprova.");
+    } finally {
+      setDataBusy(false);
+    }
   };
-  const accountTransaction = () => {
+  const saveTransaction = async (transaction: Transaction) => {
+    if (!user) return;
+    const supabase = getSupabaseBrowserClient();
+    const account = accounts.find(item => item.name === transaction.account);
+    const destinationAccount = accounts.find(item => item.name === transaction.destinationAccountId || item.id === transaction.destinationAccountId);
+    const leafName = transaction.category.replace("Rimborso · ", "").split("›").at(-1)?.trim();
+    const category = categories.find(item => item.name === leafName && item.kind === (transaction.amount < 0 ? "expense" : transaction.isRefund ? "expense" : "income"));
+    if (!account) {
+      setDataError("Seleziona un conto valido prima di salvare.");
+      return;
+    }
+    let recurrenceId: string | null = transaction.recurrenceId ?? null;
+    if (transaction.planned && !recurrenceId) {
+      const { data: recurrence, error } = await supabase.from("recurrences").insert({
+        user_id: user.id,
+        account_id: account.id,
+        destination_account_id: transaction.kind === "transfer" ? destinationAccount?.id : null,
+        category_id: category?.id ?? null,
+        kind: transaction.kind === "transfer" ? "transfer" : transaction.amount < 0 ? "expense" : "income",
+        amount: Math.abs(transaction.amount),
+        frequency: transaction.frequency ?? "monthly",
+        interval_count: transaction.intervalCount ?? 1,
+        occurrence_limit: transaction.occurrenceLimit ?? null,
+        next_date: transaction.dateISO ?? toIsoDate(new Date()),
+        automatic_accounting: transaction.automaticAccounting ?? false,
+        is_subscription: transaction.subscription ?? false,
+        notes: transaction.label,
+      }).select("id").single();
+      if (error) { setDataError(error.message); return; }
+      recurrenceId = recurrence?.id ?? null;
+    }
+    const payload = {
+      user_id: user.id,
+      kind: transaction.isRefund ? "refund" : transaction.kind === "transfer" ? "transfer" : transaction.amount < 0 ? "expense" : "income",
+      account_id: account.id,
+      destination_account_id: transaction.kind === "transfer" ? destinationAccount?.id ?? null : null,
+      category_id: category?.id ?? null,
+      recurrence_id: recurrenceId,
+      refund_of_id: transaction.isRefund ? transaction.refundOf ?? null : null,
+      transfer_group_id: transaction.kind === "transfer" ? crypto.randomUUID() : null,
+      amount: Math.abs(transaction.amount),
+      voucher_count: transaction.voucherCount ?? null,
+      transaction_date: transaction.dateISO ?? toIsoDate(new Date()),
+      due_date: transaction.planned ? transaction.dateISO ?? toIsoDate(new Date()) : null,
+      confirmed_at: transaction.planned ? null : new Date().toISOString(),
+      accounted_at: transaction.accounted ? new Date().toISOString() : null,
+      notes: transaction.label,
+    };
+    const result = modal?.editing
+      ? await supabase.from("transactions").update(payload).eq("id", transaction.id)
+      : await supabase.from("transactions").insert(payload);
+    if (result.error) { setDataError(result.error.message); return; }
+    setModal(null);
+    await refreshData(user);
+  };
+  const accountTransaction = async () => {
     if(!selectedTransaction) return;
-    setTransactions(rows=>rows.map(row=>row.id===selectedTransaction.id?{...row,accounted:true}:row));
-    setSelectedTransaction({...selectedTransaction,accounted:true});
+    const { error } = await getSupabaseBrowserClient().from("transactions").update({ accounted_at: new Date().toISOString() }).eq("id", selectedTransaction.id);
+    if (error) { setDataError(error.message); return; }
+    setSelectedTransaction(null);
+    await refreshData();
   };
   const beginRefund = () => {
     if(!selectedTransaction) return;
     const original = selectedTransaction;
     setSelectedTransaction(null);
-    setModal({kind:"income",preset:"normal",defaultAccount:original.account,initial:{...original,id:Date.now(),amount:Math.abs(original.amount),accounted:false},refundSource:original});
+    setModal({kind:"income",preset:"normal",defaultAccount:original.account,initial:{...original,id:crypto.randomUUID(),amount:Math.abs(original.amount),accounted:false},refundSource:original});
   };
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -785,9 +958,104 @@ export default function Home() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    setDataBusy(true);
+    void refreshData(user);
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase.channel(`money-elite-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "accounts", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
+      .on("postgres_changes", { event: "*", schema: "public", table: "recurrences", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
+      .on("postgres_changes", { event: "*", schema: "public", table: "budgets", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const signOut = async () => {
     await getSupabaseBrowserClient().auth.signOut();
     setUser(null);
+  };
+
+  const saveAccount = async (draft: AccountDraft, account?: MoneyAccount) => {
+    if(!user) return;
+    const payload = {
+      user_id: user.id,
+      name: draft.name,
+      type: draft.type,
+      opening_balance: draft.openingBalance,
+      voucher_unit_value: draft.type === "meal_vouchers" ? draft.voucherUnitValue : null,
+      notes: draft.notes || null,
+      icon: draft.type === "meal_vouchers" ? "voucher" : draft.type === "cash" ? "cash" : draft.type === "savings" ? "savings" : "bank",
+      color: draft.type === "meal_vouchers" ? "#7051bf" : "#4f9d82",
+    };
+    const result = account
+      ? await getSupabaseBrowserClient().from("accounts").update(payload).eq("id",account.id)
+      : await getSupabaseBrowserClient().from("accounts").insert(payload);
+    if(result.error){setDataError(result.error.message);return;}
+    await refreshData(user);
+  };
+  const toggleAccount = async (account: MoneyAccount) => {
+    const {error}=await getSupabaseBrowserClient().from("accounts").update({hidden_from_totals:!account.hidden}).eq("id",account.id);
+    if(error){setDataError(error.message);return;}
+    await refreshData();
+  };
+  const archiveAccount = async (account: MoneyAccount) => {
+    if(!window.confirm(`Archiviare il conto “${account.name}”? Le transazioni resteranno nei bilanci e non sarà più possibile aggiungerne di nuove.`)) return;
+    const {error}=await getSupabaseBrowserClient().from("accounts").update({archived_at:new Date().toISOString()}).eq("id",account.id);
+    if(error){setDataError(error.message);return;}
+    await refreshData();
+  };
+  const deleteAccount = async (account: MoneyAccount) => {
+    if(account.archived){setDataError("Un conto archiviato resta disponibile in sola consultazione e non può essere eliminato.");return;}
+    if(!window.confirm(`Eliminare definitivamente “${account.name}” e tutte le transazioni associate? Questa operazione non può essere annullata.`)) return;
+    const supabase=getSupabaseBrowserClient();
+    const recurrenceResult=await supabase.from("recurrences").delete().or(`account_id.eq.${account.id},destination_account_id.eq.${account.id}`);
+    if(recurrenceResult.error){setDataError(recurrenceResult.error.message);return;}
+    const transactionResult=await supabase.from("transactions").delete().or(`account_id.eq.${account.id},destination_account_id.eq.${account.id}`);
+    if(transactionResult.error){setDataError(transactionResult.error.message);return;}
+    const {error}=await supabase.from("accounts").delete().eq("id",account.id);
+    if(error){setDataError(error.message);return;}
+    await refreshData();
+  };
+  const removeTransaction = async (transaction: Transaction) => {
+    if(!window.confirm("Eliminare definitivamente questa transazione?")) return;
+    const {error}=await getSupabaseBrowserClient().from("transactions").delete().eq("id",transaction.id);
+    if(error){setDataError(error.message);return;}
+    setSelectedTransaction(null);
+    await refreshData();
+  };
+  const confirmPlannedTransaction = async (transaction: Transaction) => {
+    const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: new Date().toISOString() };
+    if(transaction.accounted) updates.accounted_at = new Date().toISOString();
+    const {error}=await getSupabaseBrowserClient().from("transactions").update(updates).eq("id",transaction.id);
+    if(error){setDataError(error.message);return;}
+    await refreshData();
+  };
+  const skipPlannedTransaction = async (transaction: Transaction) => {
+    if(!transaction.dueDate) return;
+    const nextDate=addOneMonth(transaction.dueDate);
+    if(!window.confirm(`Saltare la prossima ripetizione del ${formatItalianDate(transaction.dueDate)}? La nuova scadenza sarà ${formatItalianDate(nextDate)}.`)) return;
+    const supabase=getSupabaseBrowserClient();
+    const {error}=await supabase.from("transactions").update({transaction_date:nextDate,due_date:nextDate}).eq("id",transaction.id);
+    if(error){setDataError(error.message);return;}
+    if(transaction.recurrenceId) await supabase.from("recurrences").update({next_date:nextDate}).eq("id",transaction.recurrenceId);
+    setSelectedTransaction(null);
+    await refreshData();
+  };
+  const repeatPlannedNow = async (transaction: Transaction) => {
+    if(!user||!transaction.dueDate||!transaction.accountId) return;
+    const today=toIsoDate(new Date());
+    if(!window.confirm(`Anticipare la ripetizione dal ${formatItalianDate(transaction.dueDate)} a oggi, ${formatItalianDate(today)}?`)) return;
+    const supabase=getSupabaseBrowserClient();
+    const nextDate=addOneMonth(transaction.dueDate);
+    const {error}=await supabase.from("transactions").update({transaction_date:today,due_date:today,confirmed_at:new Date().toISOString()}).eq("id",transaction.id);
+    if(error){setDataError(error.message);return;}
+    await supabase.from("transactions").insert({user_id:user.id,kind:transaction.kind|| (transaction.amount<0?"expense":"income"),account_id:transaction.accountId,destination_account_id:transaction.destinationAccountId||null,category_id:transaction.categoryId||null,recurrence_id:transaction.recurrenceId||null,transfer_group_id:transaction.kind==="transfer"?crypto.randomUUID():null,amount:Math.abs(transaction.amount),voucher_count:transaction.voucherCount||null,transaction_date:nextDate,due_date:nextDate,confirmed_at:null,accounted_at:null,notes:transaction.label});
+    if(transaction.recurrenceId) await supabase.from("recurrences").update({next_date:nextDate}).eq("id",transaction.recurrenceId);
+    setSelectedTransaction(null);
+    await refreshData();
   };
 
   const choose = (s: Section) => { setActive(s); setMobileNav(false); };
@@ -795,6 +1063,7 @@ export default function Home() {
     return <main className="auth-loading"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><span>Caricamento sicuro…</span></main>;
   }
   if (!user) return <LoginScreen onSignedIn={setUser}/>;
+  if (dataBusy) return <main className="auth-loading"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><span>Sincronizzazione dati…</span></main>;
 
   return (
     <div className="app-shell">
@@ -804,13 +1073,14 @@ export default function Home() {
         <button className="mobile-menu" onClick={()=>setMobileNav(true)}>☰</button>
         <Header active={active} />
         <div className="page-content">
-          {active === "Dashboard" ? <Dashboard transactions={transactions} setActive={setActive} confirmTransaction={t=>setTransactions(x=>[t,...x])} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} onAdd={(kind,defaultAccount)=>setModal({kind,preset:"normal",defaultAccount})}/>}
+          {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} transactions={transactions} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} onAdd={(kind,defaultAccount)=>setModal({kind,preset:"normal",defaultAccount})}/>}
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}
       {active === "Abbonamenti" && <button className="quick-main quick-standalone" onClick={()=>setModal({kind:"expense",preset:"subscription"})}>+</button>}
-      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:t})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>{setTransactions(rows=>rows.filter(row=>row.id!==selectedTransaction.id));setSelectedTransaction(null)}}/>}
-      {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} close={()=>setModal(null)} add={saveTransaction}/>}
+      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:t.dueDate?"planned":"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>}
+      {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} accounts={accounts} categories={categories} close={()=>setModal(null)} add={saveTransaction}/>}
     </div>
   );
 }
