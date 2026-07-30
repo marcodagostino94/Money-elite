@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
+import type { User } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Section =
   | "Dashboard"
@@ -83,7 +85,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   finance:L.BadgeEuro,trash:L.Trash2,archive:L.Archive,edit:L.Pencil,building:L.Building2,parking:L.CircleParking,
   flame:L.Flame,light:L.Lightbulb,cleaning:L.SprayCan,bike:L.Bike,bus:L.BusFront,beach:L.Umbrella,
   cinema:L.Clapperboard,fun:L.Sparkles,tax:L.ReceiptText,sport:L.Dumbbell,more:L.MoreHorizontal,
-  plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,
+  plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,logout:L.LogOut,
   eye:L.Eye,eyeOff:L.EyeOff,check:L.Check,down:L.ChevronDown,up:L.ChevronUp,clock:L.Clock3,stethoscope:L.Stethoscope,
 };
 
@@ -135,7 +137,7 @@ function Logo() {
   );
 }
 
-function Sidebar({ active, setActive }: { active: Section; setActive: (s: Section) => void }) {
+function Sidebar({ active, setActive, email, signOut }: { active: Section; setActive: (s: Section) => void; email: string; signOut: () => void }) {
   return (
     <aside className="sidebar">
       <Logo />
@@ -165,8 +167,66 @@ function Sidebar({ active, setActive }: { active: Section; setActive: (s: Sectio
           </button>
         ))}
       </nav>
-      <div className="profile"><div className="avatar">MD</div><div><b>Marco</b><small>Profilo personale</small></div><button>•••</button></div>
+      <div className="profile"><div className="avatar">MD</div><div><b>Marco</b><small title={email}>Profilo personale</small></div><button onClick={signOut} aria-label="Esci dall’account" title="Esci"><AppIcon name="logout" size={17}/></button></div>
     </aside>
+  );
+}
+
+function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const { data, error: signInError } = await getSupabaseBrowserClient().auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+
+    if (signInError || !data.user) {
+      setError("Email o password non corretti.");
+      setBusy(false);
+      return;
+    }
+
+    onSignedIn(data.user);
+  };
+
+  return (
+    <main className="login-page">
+      <section className="login-card">
+        <div className="login-brand">
+          <img src="/money-elite-icon.png" alt="" />
+          <div><h1>Money Elite</h1><p>Il tuo denaro, con stile.</p></div>
+        </div>
+        <div className="login-heading">
+          <span>AREA PERSONALE</span>
+          <h2>Bentornato, Marco</h2>
+          <p>Accedi per consultare i tuoi conti e le tue transazioni.</p>
+        </div>
+        <form onSubmit={submit}>
+          <label>Email
+            <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required />
+          </label>
+          <label>Password
+            <span className="password-field">
+              <input type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required />
+              <button type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? "Nascondi password" : "Mostra password"}>
+                <AppIcon name={showPassword ? "eyeOff" : "eye"} size={18}/>
+              </button>
+            </span>
+          </label>
+          {error && <p className="login-error" role="alert">{error}</p>}
+          <button className="login-submit" disabled={busy}>{busy ? "Accesso in corso…" : "Accedi"}</button>
+        </form>
+        <p className="login-security"><AppIcon name="check" size={14}/> Accesso protetto e dati personali separati tramite Supabase.</p>
+      </section>
+    </main>
   );
 }
 
@@ -211,7 +271,7 @@ function Dashboard({ transactions, setActive, confirmTransaction, openTransactio
   ]);
   const duePending = pending.filter(item => item.dueDate <= today);
   const confirmPending = (item: typeof pending[number]) => {
-    confirmTransaction({id:Date.now(),label:item.label,category:item.category,account:item.account,date:item.fullDate,amount:item.amount,icon:item.accounted?"check":"planned",color:item.amount<0?"orange":"green",accounted:item.accounted});
+    confirmTransaction({id:10000+item.id,label:item.label,category:item.category,account:item.account,date:item.fullDate,amount:item.amount,icon:item.accounted?"check":"planned",color:item.amount<0?"orange":"green",accounted:item.accounted});
     setPending(x => x.filter(p => p.id !== item.id));
   };
   return (
@@ -373,7 +433,7 @@ function AccountsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?:
   const activeAccounts = accounts.filter(a=>!archivedAccounts.has(a.name));
   const archived = accounts.filter(a=>archivedAccounts.has(a.name));
   const visibleTotal = activeAccounts.filter(a=>!hiddenAccounts.has(a.name)).reduce((sum,a)=>sum+a.balance,0);
-  const toggleHidden = (name:string) => setHiddenAccounts(current=>{const next=new Set(current);next.has(name)?next.delete(name):next.add(name);return next});
+  const toggleHidden = (name:string) => setHiddenAccounts(current=>{const next=new Set(current);if(next.has(name))next.delete(name);else next.add(name);return next});
   const archive = (name:string) => {setArchivedAccounts(current=>new Set(current).add(name));setMenu(null)};
   if (detailAccount) {
     const account = accounts.find(a=>a.name===detailAccount)!;
@@ -688,6 +748,8 @@ function TransactionDetail({ transaction, close, account, duplicate, edit, remov
 }
 
 export default function Home() {
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
   const [active, setActive] = useState<Section>("Dashboard");
   const [mobileNav, setMobileNav] = useState(false);
   const [modal, setModal] = useState<{ kind: ActionKind; preset: "normal" | "planned" | "subscription"; defaultAccount?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction } | null>(null);
@@ -707,11 +769,34 @@ export default function Home() {
     setSelectedTransaction(null);
     setModal({kind:"income",preset:"normal",defaultAccount:original.account,initial:{...original,id:Date.now(),amount:Math.abs(original.amount),accounted:false},refundSource:original});
   };
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await getSupabaseBrowserClient().auth.signOut();
+    setUser(null);
+  };
+
   const choose = (s: Section) => { setActive(s); setMobileNav(false); };
+  if (!authReady) {
+    return <main className="auth-loading"><img src="/money-elite-icon.png" alt="Money Elite"/><span>Caricamento sicuro…</span></main>;
+  }
+  if (!user) return <LoginScreen onSignedIn={setUser}/>;
+
   return (
     <div className="app-shell">
       <div className={mobileNav ? "mobile-overlay show" : "mobile-overlay"} onClick={()=>setMobileNav(false)} />
-      <div className={mobileNav ? "sidebar-wrap open" : "sidebar-wrap"}><Sidebar active={active} setActive={choose}/></div>
+      <div className={mobileNav ? "sidebar-wrap open" : "sidebar-wrap"}><Sidebar active={active} setActive={choose} email={user.email ?? ""} signOut={signOut}/></div>
       <main>
         <button className="mobile-menu" onClick={()=>setMobileNav(true)}>☰</button>
         <Header active={active} />
