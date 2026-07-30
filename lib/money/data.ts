@@ -64,7 +64,7 @@ const accountSeeds = [
 ] as const;
 
 export async function ensureInitialData(supabase: SupabaseClient, userId: string) {
-  const { error: profileError } = await supabase.rpc("ensure_money_elite_profile");
+  const { error: profileError } = await supabase.from("profiles").upsert({ id: userId, display_name: "Marco" }, { onConflict: "id" });
   if (profileError) throw profileError;
 
   const { count: accountCount, error: countAccountsError } = await supabase.from("accounts").select("id", { count: "exact", head: true });
