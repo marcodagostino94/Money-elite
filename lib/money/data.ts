@@ -64,20 +64,25 @@ const accountSeeds = [
 ] as const;
 
 export async function ensureInitialData(supabase: SupabaseClient, userId: string) {
-  await supabase.from("profiles").upsert({ id: userId, display_name: "Marco" }, { onConflict: "id" });
+  const { error: profileError } = await supabase.rpc("ensure_money_elite_profile");
+  if (profileError) throw profileError;
 
-  const { count: accountCount } = await supabase.from("accounts").select("id", { count: "exact", head: true });
+  const { count: accountCount, error: countAccountsError } = await supabase.from("accounts").select("id", { count: "exact", head: true });
+  if (countAccountsError) throw countAccountsError;
   if (!accountCount) {
-    await supabase.from("accounts").insert(accountSeeds.map(account => ({ ...account, user_id: userId })));
+    const { error } = await supabase.from("accounts").insert(accountSeeds.map(account => ({ ...account, user_id: userId })));
+    if (error) throw error;
   }
 
-  const { count: categoryCount } = await supabase.from("categories").select("id", { count: "exact", head: true });
+  const { count: categoryCount, error: countCategoriesError } = await supabase.from("categories").select("id", { count: "exact", head: true });
+  if (countCategoriesError) throw countCategoriesError;
   if (!categoryCount) {
     for (const [kind, name, color, icon, children] of categorySeeds) {
       const { data: root, error } = await supabase.from("categories").insert({ user_id: userId, kind, name, color, icon }).select("id").single();
-      if (error || !root) continue;
+      if (error) throw error;
+      if (!root) throw new Error("Impossibile creare la categoria iniziale");
       if (children.length) {
-        await supabase.from("categories").insert(children.sort((a, b) => a.localeCompare(b, "it")).map((child, index) => ({
+        const { error: childrenError } = await supabase.from("categories").insert(children.sort((a, b) => a.localeCompare(b, "it")).map((child, index) => ({
           user_id: userId,
           parent_id: root.id,
           kind,
@@ -86,6 +91,7 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
           icon: child === "Medici" ? "stethoscope" : child === "Telepass" ? "telepass" : icon,
           sort_order: index,
         })));
+        if (childrenError) throw childrenError;
       }
     }
   }

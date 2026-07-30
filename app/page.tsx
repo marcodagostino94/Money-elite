@@ -97,6 +97,16 @@ const budgets = [
 const money = (value: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 
+const parseItalianAmount = (value: FormDataEntryValue | string | null) => {
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  const normalized = text.includes(",") ? text.replace(/\./g, "").replace(",", ".") : text;
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const amountInput = (value: number | null | undefined) => value == null ? "" : value.toFixed(2).replace(".", ",");
+
 const addOneMonth = (isoDate: string) => {
   const date = new Date(`${isoDate}T12:00:00`);
   date.setMonth(date.getMonth()+1);
@@ -491,15 +501,16 @@ function GenericSection({ section, onAdd, accounts, transactions, onSaveAccount,
 function AccountModal({ account, close, save }: { account?: MoneyAccount; close: () => void; save: (draft: AccountDraft, account?: MoneyAccount) => Promise<void> }) {
   const [name, setName] = useState(account?.name ?? "");
   const [type, setType] = useState<MoneyAccount["type"]>(account?.type ?? "bank");
-  const [openingBalance, setOpeningBalance] = useState(account?.openingBalance ?? 0);
-  const [voucherUnitValue, setVoucherUnitValue] = useState(account?.voucherUnitValue ?? 8);
+  const [openingBalance, setOpeningBalance] = useState(account ? amountInput(account.openingBalance) : "");
+  const [voucherUnitValue, setVoucherUnitValue] = useState(amountInput(account?.voucherUnitValue ?? 8));
   const [notes, setNotes] = useState(account?.notes ?? "");
   const [busy, setBusy] = useState(false);
-  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type,openingBalance,voucherUnitValue:type==="meal_vouchers"?voucherUnitValue:null,notes},account);setBusy(false)}}>
+  const parsedVoucherValue = parseItalianAmount(voucherUnitValue) || 8;
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type,openingBalance:parseItalianAmount(openingBalance),voucherUnitValue:type==="meal_vouchers"?parsedVoucherValue:null,notes},account);setBusy(false)}}>
     <div className="modal-title"><div><small>{account?"MODIFICA CONTO":"NUOVO CONTO"}</small><h2>{account?account.name:"Crea nuovo conto"}</h2></div></div>
     <label>Nome<input required value={name} onChange={event=>setName(event.target.value)} placeholder="Es. Conto principale"/></label>
     <label>Tipo di conto<select value={type} onChange={event=>setType(event.target.value as MoneyAccount["type"])} disabled={Boolean(account)}><option value="bank">Conto corrente</option><option value="cash">Contanti</option><option value="savings">Conto deposito</option><option value="meal_vouchers">Buoni pasto</option><option value="other">Altro</option></select></label>
-    {type==="meal_vouchers"?<><label>Valore di ogni buono<div className="amount-input"><span>€</span><input type="number" inputMode="decimal" min="0.01" step="0.01" value={voucherUnitValue} onChange={event=>setVoucherUnitValue(Number(event.target.value))}/></div></label><label>Saldo iniziale<input type="number" inputMode="numeric" min="0" step="1" value={Math.round(openingBalance/voucherUnitValue)||0} onChange={event=>setOpeningBalance(Number(event.target.value)*voucherUnitValue)}/></label></>:<label>Importo iniziale<input type="number" inputMode="decimal" step="0.01" value={openingBalance} onChange={event=>setOpeningBalance(Number(event.target.value))}/></label>}
+    {type==="meal_vouchers"?<><label>Valore di ogni buono<div className="amount-input"><span>€</span><input type="text" inputMode="decimal" value={voucherUnitValue} onChange={event=>setVoucherUnitValue(event.target.value)} placeholder="8,00"/></div></label><label>Numero iniziale di buoni<input type="text" inputMode="numeric" value={openingBalance ? String(Math.round(parseItalianAmount(openingBalance)/parsedVoucherValue)) : ""} onChange={event=>setOpeningBalance(String(Math.max(0, Number(event.target.value)||0)*parsedVoucherValue).replace(".",","))} placeholder="0"/></label></>:<label>Importo iniziale<input type="text" inputMode="decimal" value={openingBalance} onChange={event=>setOpeningBalance(event.target.value)} placeholder="0,00"/></label>}
     <label>Note<input value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Opzionale"/></label>
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer" disabled={busy}>{busy?"Salvataggio…":"Salva"}</button></div>
   </form></div>;
@@ -760,7 +771,7 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const raw = Number(fd.get("amount"));
+    const raw = parseItalianAmount(fd.get("amount"));
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
     void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${selectedCategory || refundSource.category}` : category, account: isTransfer ? from : selectedAccount, destinationAccountId: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
   };
@@ -770,10 +781,10 @@ function TransactionModal({ kind, close, add, accounts, categories, preset = "no
     {refundSource&&<div className="refund-source"><span>Spesa originale</span><b>{refundSource.label}</b><small>{money(Math.abs(refundSource.amount))} · {refundSource.account} · {refundSource.date}</small></div>}
     {isMealVoucher ? <div className="transaction-voucher-box">
       <div className="voucher-explainer"><span className="real-icon"><AppIcon name="voucher" size={21}/></span><div><b>{kind==="income"?"Carica buoni pasto":"Utilizza buoni pasto"}</b><small>Il valore unitario impostato nel conto è {money(voucherValue)}.</small></div></div>
-      <label>Numero di buoni<input name="voucherCount" type="number" min="1" step="1" value={voucherCount} onChange={e=>setVoucherCount(Math.max(1,Number(e.target.value)))} autoFocus/></label>
+      <label>Numero di buoni<input name="voucherCount" type="text" inputMode="numeric" value={voucherCount} onChange={e=>setVoucherCount(Math.max(1, Number(e.target.value) || 1))}/></label>
       <input name="amount" type="hidden" value={voucherCount*voucherValue}/>
       <div className="voucher-calculation"><span>{voucherCount} × {money(voucherValue)}</span><strong>{money(voucherCount*voucherValue)}</strong></div>
-    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="number" inputMode="decimal" min="0.01" step="0.01" required placeholder="0,00" defaultValue={initial?Math.abs(initial.amount):undefined} autoFocus/></div></label>}
+    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" defaultValue={initial?amountInput(Math.abs(initial.amount)):undefined}/></div></label>}
     {isTransfer ? <div className="transfer-fields">
       <label>Da<select value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value===to)setTo(usableAccounts.find(account=>account.name!==e.target.value)?.name||"")}}>{usableAccounts.map(account=><option key={account.id}>{account.name}</option>)}</select><small>Disponibile: {money(usableAccounts.find(account=>account.name===from)?.balance||0)}</small></label>
       <div className="transfer-arrow">↓</div>
@@ -872,7 +883,7 @@ export default function Home() {
       setDataError("");
     } catch (error) {
       console.error(error);
-      setDataError("Non è stato possibile sincronizzare i dati. Controlla la connessione e riprova.");
+      setDataError(error instanceof Error ? `Sincronizzazione non completata: ${error.message}` : "Non è stato possibile sincronizzare i dati. Riprova.");
     } finally {
       setDataBusy(false);
     }

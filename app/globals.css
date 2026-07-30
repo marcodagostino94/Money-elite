@@ -99,3 +99,12 @@ input,textarea,select{font-size:16px}
   .account-menu{position:fixed!important;z-index:30!important;left:10px!important;right:10px!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;top:auto!important;width:auto!important;padding:8px!important;border-radius:15px!important;box-shadow:0 18px 70px #0006!important}
   .account-menu button svg,.transaction-detail-menu button svg{width:20px;height:20px}
 }
+
+/* Il grafico resta sempre sopra il pulsante mobile e non viene tagliato su iPhone. */
+@media(max-width:620px){
+  .insight-panel{position:relative;z-index:2;margin-bottom:78px}
+  .insight-chart{min-height:215px;padding-bottom:20px}
+  .insight-chart .sparkline{height:155px;overflow:visible}
+  .sparkline .dot{right:5px}
+  .quick-actions,.quick-standalone{z-index:35}
+}
