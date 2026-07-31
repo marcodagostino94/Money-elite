@@ -132,3 +132,8 @@ input,textarea,select{font-size:16px}
   border-radius: 10px;
 }
 .period-select:hover { background: rgba(120, 89, 206, .06); }
+
+/* Money Elite v3.0 - editor ricorrenze unificato */
+.subscription-row{grid-template-columns:45px 1fr auto auto}
+.subscription-edit-area{cursor:pointer;outline:none}
+.subscription-edit-area:focus-visible{outline:2px solid #9fc0ff;outline-offset:4px;border-radius:8px}
