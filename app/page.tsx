@@ -554,12 +554,22 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
   const visibleTotal = activeAccounts.filter(account=>!account.hidden).reduce((sum,account)=>sum+account.balance,0);
   const detail = accounts.find(account=>account.id===detailId);
   if(detail) {
-    const rows = transactions
-      .filter(transaction=>(transaction.accountId===detail.id || transaction.destinationAccountId===detail.id) && dateInMonth(transaction.dateISO, detailMonth))
+    const accountTransactions = transactions.filter(transaction=>transaction.accountId===detail.id || transaction.destinationAccountId===detail.id);
+    const monthChoices = (() => {
+      const keys = accountTransactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x));
+      const earliest = keys.length ? [...keys].sort()[0] : monthKeyFromDate(new Date());
+      const latest = monthKeyFromDate(new Date());
+      const result:string[]=[];
+      let cursor=earliest;
+      while(cursor<=latest){result.push(cursor);cursor=shiftMonthKey(cursor,1);}
+      return result.reverse();
+    })();
+    const rows = accountTransactions
+      .filter(transaction=>dateInMonth(transaction.dateISO, detailMonth))
       .map(transaction=>transaction.kind==="transfer" ? {...transaction, amount: transaction.destinationAccountId===detail.id ? Math.abs(transaction.amount) : -Math.abs(transaction.amount)} : transaction);
     return <section className="section-page">
       <div className="inner-page-header"><button onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CONTO</small><h2>{detail.name}</h2><p>Transazioni di {monthLabel(detailMonth)}</p></div></div>
-      <div className="period-nav"><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={15}/> Mese precedente</button><strong>{monthLabel(detailMonth)}</strong><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}>Mese successivo <AppIcon name="forward" size={15}/></button></div>
+      <div className="period-nav"><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={15}/> Mese precedente</button><select className="period-select" value={detailMonth} onChange={event=>setDetailMonth(event.target.value)}>{!monthChoices.includes(detailMonth)&&<option value={detailMonth}>{monthLabel(detailMonth)}</option>}{monthChoices.map(value=><option key={value} value={value}>{monthLabel(value)}</option>)}</select><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}>Mese successivo <AppIcon name="forward" size={15}/></button></div>
       <div className="account-detail-summary"><div className="item-icon real-icon"><AppIcon name={detail.icon}/></div><div className="account-balance-pair"><div><small>SALDO ALLA DATA DI OGGI</small><strong>{money(detail.balance)}</strong></div><div><small>MOVIMENTI VISUALIZZATI</small><strong>{rows.length}</strong></div>{detail.type==="meal_vouchers"&&<span>{detail.voucherCount} buoni da {money(detail.voucherUnitValue||0)}</span>}</div></div>
       <article className="panel month-transactions">{rows.length?rows.map(transaction=><TransactionRow key={transaction.id} t={transaction} onOpen={openTransaction}/>):<div className="empty">Nessuna transazione in {monthLabel(detailMonth)}.</div>}</article>
       {!detail.archived&&<QuickActions openAction={kind=>onAdd(kind,detail.name)}/>}</section>;

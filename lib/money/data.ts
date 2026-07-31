@@ -135,17 +135,39 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
   }
 }
 
+async function loadAllTransactions(supabase: SupabaseClient, userId: string) {
+  const pageSize = 1000;
+  const rows: any[] = [];
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
   await ensureInitialData(supabase, userId);
-  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, { data: rawTransactions, error: transactionsError }, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }] = await Promise.all([
+  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, rawTransactions, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase.from("categories").select("*").order("name"),
-    supabase.from("transactions").select("*").order("transaction_date", { ascending: false }).order("created_at", { ascending: false }),
+    loadAllTransactions(supabase, userId),
     supabase.from("cards").select("*").order("name"),
     supabase.from("budgets").select("*").order("month", { ascending: false }),
     supabase.from("recurrences").select("*").eq("active", true).order("next_date"),
   ]);
-  const error = accountsError ?? categoriesError ?? transactionsError ?? cardsError ?? budgetsError ?? recurrencesError;
+  const error = accountsError ?? categoriesError ?? cardsError ?? budgetsError ?? recurrencesError;
   if (error) throw error;
 
   const transactions: MoneyTransaction[] = (rawTransactions ?? []).map(row => ({
