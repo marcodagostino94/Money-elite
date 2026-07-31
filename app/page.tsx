@@ -24,6 +24,8 @@ type Transaction = {
   label: string;
   category: string;
   account: string;
+  notes?: string;
+  destinationAccountName?: string | null;
   date: string;
   amount: number;
   icon: string;
@@ -139,16 +141,20 @@ const compactDate = (isoDate: string) => new Intl.DateTimeFormat("it-IT",{day:"2
 
 const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[], categories: MoneyCategory[], cards: MoneyCard[]): Transaction => {
   const account = accounts.find(item => item.id === row.accountId);
+  const destinationAccount = accounts.find(item => item.id === row.destinationAccountId);
   const card = cards.find(item => item.id === row.cardId);
   const category = categories.find(item => item.id === row.categoryId);
   const parent = category?.parentId ? categories.find(item => item.id === category.parentId) : null;
   const categoryLabel = category ? (parent ? `${parent.name} › ${category.name}` : category.name) : row.kind === "transfer" ? "Trasferimento tra conti" : "Senza categoria";
+  const titleBase = category?.name ?? (row.kind === "transfer" ? "Giroconto" : "Senza categoria");
   const signedAmount = row.kind === "expense" || row.kind === "card_repayment" ? -row.amount : row.amount;
   return {
     id: row.id,
-    label: row.notes || (row.kind === "refund" ? `Rimborso ${category?.name ?? "spesa"}` : category?.name ?? (row.kind === "transfer" ? "Trasferimento fondi" : "Transazione")),
-    category: row.kind === "refund" ? `Rimborso · ${categoryLabel}` : categoryLabel,
+    label: row.kind === "transfer" ? "Giroconto" : row.kind === "refund" ? `${titleBase} (Rimborso)` : titleBase,
+    category: categoryLabel,
     account: card?.name ?? account?.name ?? "Conto archiviato",
+    notes: row.notes ?? "",
+    destinationAccountName: destinationAccount?.name ?? null,
     accountId: row.accountId,
     cardId: row.cardId,
     destinationAccountId: row.destinationAccountId,
@@ -465,10 +471,15 @@ function QuickActions({ openAction, allowTransfer = true, plannedLabels = false 
 }
 
 function TransactionRow({ t, onOpen }: { t: Transaction; onOpen?: (t: Transaction) => void }) {
+  const categoryTitle = t.category.replace(/^Rimborso\s*[·:-]?\s*/i, "").split("›").at(-1)?.trim() || "Senza categoria";
+  const title = t.kind === "transfer" ? "Giroconto" : `${categoryTitle}${t.isRefund ? " (Rimborso)" : ""}`;
+  const subtitle = t.kind === "transfer"
+    ? `Trasferimento tra conti: ${t.account} → ${t.destinationAccountName || "Conto destinazione"}`
+    : `${t.account}${t.notes?.trim() ? ` • ${t.notes.trim()}` : ""}`;
   return (
     <button type="button" className={`transaction-row ${onOpen?"clickable":""}`} onClick={()=>onOpen?.(t)}>
       <div className={`transaction-icon ${t.color}`}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Non contabilizzata"><AppIcon name="check" size={9}/></i>}</div>
-      <div className="transaction-info"><b>{t.label}</b><span>{t.isRefund?"Rimborso spesa · ":`${t.category} · `}{t.account}</span></div>
+      <div className="transaction-info"><b>{title}</b><span>{subtitle}</span></div>
       <div className="transaction-amount"><b className={t.amount > 0 ? "positive" : ""}>{t.amount > 0 ? "+" : ""}{money(t.amount)}</b><span>{t.date}</span></div>
     </button>
   );
@@ -829,12 +840,13 @@ function TransactionsSection({ transactions, openTransaction }: { transactions: 
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [month, setMonth] = useState(monthKeyFromDate(new Date()));
-  const categoryOptions=useMemo(()=>Array.from(new Set(transactions.map(t=>t.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"it")),[transactions]);
-  const months=useMemo(()=>Array.from(new Set(transactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x)))).sort().reverse(),[transactions]);
-  const filtered = useMemo(() => transactions.filter(t => {
-    const text=`${t.label} ${t.category} ${t.account}`.toLowerCase();
+  const visibleTransactions=useMemo(()=>transactions.filter(t=>t.kind!=="transfer"),[transactions]);
+  const categoryOptions=useMemo(()=>Array.from(new Set(visibleTransactions.map(t=>t.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"it")),[visibleTransactions]);
+  const months=useMemo(()=>Array.from(new Set(visibleTransactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x)))).sort().reverse(),[visibleTransactions]);
+  const filtered = useMemo(() => visibleTransactions.filter(t => {
+    const text=`${t.label} ${t.category} ${t.account} ${t.notes ?? ""}`.toLowerCase();
     return text.includes(query.toLowerCase()) && (category==="all"||t.category===category) && dateInMonth(t.dateISO,month);
-  }), [transactions, query, category, month]);
+  }), [visibleTransactions, query, category, month]);
   return <section className="section-page"><article className="panel full-list"><div className="filter-row"><label><AppIcon name="search" size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca una transazione..." /></label><select value={category} onChange={e=>setCategory(e.target.value)}><option value="all">Tutte le categorie</option>{categoryOptions.map(value=><option key={value} value={value}>{value}</option>)}</select><select value={month} onChange={e=>setMonth(e.target.value)}>{!months.includes(month)&&<option value={month}>{monthLabel(month)}</option>}{months.map(value=><option key={value} value={value}>{monthLabel(value)}</option>)}</select></div><div className="period-nav compact"><button onClick={()=>setMonth(value=>shiftMonthKey(value,-1))}><AppIcon name="back" size={14}/> Precedente</button><strong>{monthLabel(month)}</strong><button onClick={()=>setMonth(value=>shiftMonthKey(value,1))}>Successivo <AppIcon name="forward" size={14}/></button></div>{filtered.map(t=><TransactionRow t={t} key={t.id} onOpen={openTransaction}/>)}{!filtered.length && <div className="empty">Nessuna transazione trovata in {monthLabel(month)}.</div>}</article></section>;
 }
 
@@ -873,8 +885,10 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const raw = parseItalianAmount(fd.get("amount"));
+    const notes = String(fd.get("notes") ?? "").trim();
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
-    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: refundSource ? `Rimborso ${refundSource.label}` : isTransfer ? `Trasferimento: ${from} → ${to}` : selectedCategory.split("›").at(-1)?.trim() || selectedCategory, category: refundSource ? `Rimborso · ${selectedCategory || refundSource.category}` : category, account: isTransfer ? from : selectedAccount, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
+    const categoryTitle = selectedCategory.split("›").at(-1)?.trim() || selectedCategory;
+    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: isTransfer ? "Giroconto" : `${categoryTitle}${refundSource ? " (Rimborso)" : ""}`, category, account: isTransfer ? from : selectedAccount, notes, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, destinationAccountName: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency: "monthly", intervalCount: 1 });
   };
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}>
     <div className={`modal-accent ${kind}`} />
@@ -905,6 +919,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       {kind==="expense" && <div className="modal-toggle"><div><b>È un abbonamento?</b><span>Mostralo nella pagina Abbonamenti</span></div><button type="button" className={subscription?"on":""} onClick={()=>setSubscription(x=>!x)}><i/></button></div>}
       <label>Promemoria<select defaultValue="Nessun promemoria"><option>Nessun promemoria</option><option>Il giorno prima</option><option>3 giorni prima</option><option>7 giorni prima</option></select></label>
     </div>}
+    {!isTransfer&&<label>Note<textarea name="notes" rows={3} defaultValue={initial?.notes ?? ""} placeholder="Aggiungi una nota (opzionale)"/></label>}
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className={`save-action ${kind}`}>{refundSource?"Salva rimborso":labels.save}</button></div>
     {categoryOpen && <div className="category-picker">
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><button type="button" onClick={()=>setCategoryOpen(false)}>×</button></div>
@@ -936,7 +951,7 @@ function TransactionDetail({ transaction, close, account, duplicate, edit, remov
     <article className="transaction-detail">
       <div className="transaction-detail-head">
         <button onClick={close} aria-label="Chiudi"><AppIcon name="back"/></button>
-        <div><small>TRANSAZIONE</small><h2>{transaction.label}</h2></div>
+        <div><small>TRANSAZIONE</small><h2>{transaction.kind==="transfer"?"Giroconto":transaction.label}</h2></div>
         <button onClick={()=>setMenu(x=>!x)} aria-label="Altre azioni"><AppIcon name="more"/></button>
         {menu&&<div className="transaction-detail-menu">
           {isPlanned&&skip&&<button onClick={skip}><AppIcon name="planned" size={16}/> Salta ripetizione</button>}
@@ -951,8 +966,10 @@ function TransactionDetail({ transaction, close, account, duplicate, edit, remov
       <strong className={`transaction-detail-amount ${transaction.amount>0?"positive":""}`}>{transaction.amount>0?"+":""}{money(transaction.amount)}</strong>
       {transaction.isRefund&&<span className="refund-badge">Rimborso collegato alla spesa originale</span>}
       <div className="transaction-detail-data">
-        <div><span>Categoria</span><b>{transaction.category}</b></div>
+        <div><span>Categoria</span><b>{transaction.kind==="transfer"?"Giroconto":transaction.category}</b></div>
         <div><span>Conto</span><b>{transaction.account}</b></div>
+        {transaction.kind==="transfer"&&<div><span>Trasferimento</span><b>{transaction.account} → {transaction.destinationAccountName||"Conto destinazione"}</b></div>}
+        {transaction.kind!=="transfer"&&transaction.notes?.trim()&&<div><span>Note</span><b>{transaction.notes}</b></div>}
         <div><span>Data</span><b>{transaction.date}</b></div>
         <div><span>Stato</span><b>{transaction.accounted===false?"Da contabilizzare":"Contabilizzata"}</b></div>
       </div>
@@ -1023,7 +1040,7 @@ export default function Home() {
         next_date: transaction.dateISO ?? toIsoDate(new Date()),
         automatic_accounting: transaction.automaticAccounting ?? false,
         is_subscription: transaction.subscription ?? false,
-        notes: transaction.label,
+        notes: transaction.notes?.trim() || transaction.label,
       }).select("id").single();
       if (error) { setDataError(error.message); return; }
       recurrenceId = recurrence?.id ?? null;
@@ -1044,7 +1061,7 @@ export default function Home() {
       due_date: transaction.planned ? transaction.dateISO ?? toIsoDate(new Date()) : null,
       confirmed_at: transaction.planned ? null : new Date().toISOString(),
       accounted_at: transaction.accounted ? new Date().toISOString() : null,
-      notes: transaction.label,
+      notes: transaction.notes?.trim() || null,
     };
     const result = modal?.editing
       ? await supabase.from("transactions").update(payload).eq("id", transaction.id)
@@ -1180,7 +1197,7 @@ export default function Home() {
     const nextDate=addOneMonth(transaction.dueDate);
     const {error}=await supabase.from("transactions").update({transaction_date:today,due_date:today,confirmed_at:new Date().toISOString()}).eq("id",transaction.id);
     if(error){setDataError(error.message);return;}
-    await supabase.from("transactions").insert({user_id:user.id,kind:transaction.kind|| (transaction.amount<0?"expense":"income"),account_id:transaction.accountId,destination_account_id:transaction.destinationAccountId||null,category_id:transaction.categoryId||null,recurrence_id:transaction.recurrenceId||null,transfer_group_id:transaction.kind==="transfer"?crypto.randomUUID():null,amount:Math.abs(transaction.amount),voucher_count:transaction.voucherCount||null,transaction_date:nextDate,due_date:nextDate,confirmed_at:null,accounted_at:null,notes:transaction.label});
+    await supabase.from("transactions").insert({user_id:user.id,kind:transaction.kind|| (transaction.amount<0?"expense":"income"),account_id:transaction.accountId,destination_account_id:transaction.destinationAccountId||null,category_id:transaction.categoryId||null,recurrence_id:transaction.recurrenceId||null,transfer_group_id:transaction.kind==="transfer"?crypto.randomUUID():null,amount:Math.abs(transaction.amount),voucher_count:transaction.voucherCount||null,transaction_date:nextDate,due_date:nextDate,confirmed_at:null,accounted_at:null,notes:transaction.notes?.trim()||null});
     if(transaction.recurrenceId) await supabase.from("recurrences").update({next_date:nextDate}).eq("id",transaction.recurrenceId);
     setSelectedTransaction(null);
     await refreshData();
@@ -1207,7 +1224,7 @@ export default function Home() {
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}
       {active === "Abbonamenti" && <button className="quick-main quick-standalone" onClick={()=>setModal({kind:"expense",preset:"subscription"})}>+</button>}
-      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.amount<0?"expense":"income",preset:t.dueDate?"planned":"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>}
+      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:t.dueDate?"planned":"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>}
       {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} cardId={modal.cardId} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} accounts={accounts} cards={cards} categories={categories} close={()=>setModal(null)} add={saveTransaction}/>}
     </div>
   );
