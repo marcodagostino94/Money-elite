@@ -94,6 +94,24 @@ const categorySeeds: Array<[MoneyCategory["kind"], string, string, string, strin
   ["expense", "Viaggi", "#3c9b91", "travel", ["Divertimento Viaggi", "Hotel", "Pranzi/Cene Viaggi", "Trasporti Viaggi"]],
 ];
 
+const seededChildIcons: Record<string, string> = {
+  "730":"document","Abbigliamento":"clothes","Altri lavori":"work","Amazon":"package","App Store":"technology","Arredamento":"furniture",
+  "Automobile":"car","Bar":"coffee","Box":"home","Buoni pasto":"voucher","Carburante":"fuel","Cinema":"cinema","Condominio":"building",
+  "Cosmesi":"health","Cura Personale":"health","Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"coffee",
+  "Farmacia":"medical","Finanziamenti":"finance","Gas":"flame","Giardino":"home","Hotel":"building","iCloud":"cloud","Lavori":"hammer",
+  "Lenti a contatto":"eye","Luce":"light","Luce e Gas":"energy","Mare":"beach","Medici":"stethoscope","Multe":"tax","Noleggio":"car",
+  "Parcheggio":"parking","Pranzi/Cene":"food","Pranzi/Cene Viaggi":"food","Prodotti Casa":"home","Pulizie":"cleaning","Regali":"gift",
+  "Regalo":"gift","Rifiuti":"trash","Rimborso":"refund","Riscaldamento":"flame","Scommesse":"fun","Scooter":"bike","Sky e Netflix":"streaming",
+  "Spotify":"music","Sport":"sport","Stipendio":"finance","Straordinari":"clock","Supermercato":"groceries","Tabacchi":"circle","Tasse":"tax",
+  "Tecnologia":"technology","Telepass":"telepass","Trasporti pubblici":"bus","Trasporti Viaggi":"travel","Vodafone":"technology",
+};
+
+const seededChildColors: Record<string, string> = {
+  "Stipendio":"#43a66f","Straordinari":"#348d5c","730":"#6bb98b","Altri lavori":"#527e67","Buoni pasto":"#d39a2f",
+  "Regalo":"#397c64","Rimborso":"#4f967c","Bar":"#4fb5cf","Drink":"#279bbd","Pranzi/Cene":"#3b9bb6","Supermercato":"#62bdd4",
+  "Farmacia":"#e26b70","Medici":"#c94c53","Sport":"#d86b62","Lenti a contatto":"#c76578",
+};
+
 const accountSeeds = [
   { name: "Buoni pasto", type: "meal_vouchers", opening_balance: 144, voucher_unit_value: 8, icon: "voucher", color: "#7051bf" },
   { name: "Contanti", type: "cash", opening_balance: 520, voucher_unit_value: null, icon: "cash", color: "#4f9d82" },
@@ -125,8 +143,8 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
           parent_id: root.id,
           kind,
           name: child,
-          color,
-          icon: child === "Medici" ? "stethoscope" : child === "Telepass" ? "telepass" : icon,
+          color: seededChildColors[child] || color,
+          icon: seededChildIcons[child] || icon,
           sort_order: index,
         })));
         if (childrenError) throw childrenError;

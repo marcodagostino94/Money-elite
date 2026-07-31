@@ -165,7 +165,7 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     dueDate: row.dueDate,
     confirmedAt: row.confirmedAt,
     amount: signedAmount,
-    icon: category?.icon || (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
+    icon: category ? categoryVisual(category).icon : (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
     color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" ? "blue" : "orange",
     accounted: Boolean(row.accountedAt),
     isRefund: row.kind === "refund",
@@ -232,6 +232,27 @@ const categoryColor = (name: string) => {
   };
   return colors[name] || "#678098";
 };
+
+// Le categorie storiche di Money Elite hanno una propria identita visiva.
+// I vecchi seed del database assegnavano spesso alle sottocategorie l'icona del padre:
+// per i nomi standard usiamo quindi la mappa canonica, lasciando intatte le categorie personalizzate.
+const canonicalCategoryNames = new Set([
+  "730","Abbigliamento","Abbonamenti","Alimenti","Altri lavori","Amazon","App Store","Arredamento",
+  "Automobile","Bar","Box","Buoni pasto","Carburante","Casa","Cinema","Condominio","Cosmesi","Cura Personale",
+  "Discoteca","Divertimento","Divertimento Viaggi","Drink","Farmacia","Finanziamenti","Gas","Giardino","Guadagni",
+  "Hotel","iCloud","Lavori","Lenti a contatto","Luce","Luce e Gas","Mare","Medici","Multe","Noleggio",
+  "Parcheggio","Pranzi/Cene","Pranzi/Cene Viaggi","Prodotti Casa","Proventi Finanziari","Pulizie","Reddito","Regali",
+  "Regalo","Rifiuti","Rimborso","Riscaldamento","Salute","Scommesse","Scooter","Sky e Netflix","Spese Personali",
+  "Spotify","Sport","Stipendio","Straordinari","Supermercato","Tabacchi","Tasse","Tecnologia","Telepass","Trasporti",
+  "Trasporti pubblici","Trasporti Viaggi","Viaggi","Vodafone",
+]);
+
+const categoryVisual = (category: Pick<MoneyCategory, "name" | "icon" | "color">) =>
+  canonicalCategoryNames.has(category.name)
+    ? { icon: categoryIcon(category.name), color: categoryColor(category.name) }
+    : { icon: category.icon || "circle", color: category.color || "#678098" };
+
+const mealVoucherLeaf = (value: string) => value.split("›").at(-1)?.trim().toLocaleLowerCase("it") === "buoni pasto";
 
 function Logo() {
   return (
@@ -858,14 +879,15 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [selectedDateISO, setSelectedDateISO] = useState(initial?.dateISO || toIsoDate(new Date()));
   const [expandedCategory, setExpandedCategory] = useState(kind === "income" ? "Reddito" : "Alimenti");
   const [selectedCategory, setSelectedCategory] = useState(initial?.category || (kind === "income" ? "Reddito › Stipendio" : "Alimenti › Pranzi/Cene"));
-  const voucherValue = accounts.find(account => account.type === "meal_vouchers")?.voucherUnitValue || 8;
+  const mealVoucherAccount = accounts.find(account => account.type === "meal_vouchers");
+  const voucherValue = mealVoucherAccount?.voucherUnitValue || 8;
   const [voucherCount, setVoucherCount] = useState(initial?.voucherCount ?? Math.max(1, Math.round(Math.abs(initial?.amount ?? voucherValue) / voucherValue)));
   const [frequency, setFrequency] = useState<Transaction["frequency"]>(initial?.frequency ?? "monthly");
   const [intervalCount, setIntervalCount] = useState(initial?.intervalCount ?? 1);
   const [occurrenceLimit, setOccurrenceLimit] = useState(initial?.occurrenceLimit ?? 0);
   const isTransfer = kind === "transfer";
   const selectedCard = cards.find(card => card.id === selectedCardId);
-  const isMealVoucher = selectedCategory.split("›").at(-1)?.trim() === "Buoni pasto";
+  const isMealVoucher = mealVoucherLeaf(selectedCategory);
   const pickerKind = refundSource ? "expense" : kind === "income" ? "income" : "expense";
   const categoryGroups = categories.filter(category => category.kind === pickerKind && !category.parentId).sort((a,b)=>a.name.localeCompare(b.name,"it")).map(root => ({
     root,
@@ -901,7 +923,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       <label>A<select value={to} onChange={e=>setTo(e.target.value)}>{usableAccounts.map(account=><option key={account.id} disabled={account.name===from}>{account.name}</option>)}</select><small>Saldo: {money(usableAccounts.find(account=>account.name===to)?.balance||0)}</small></label>
     </div> : <>
       <label>Categoria e sottocategoria<button type="button" className="category-select" onClick={()=>setCategoryOpen(true)}><span>⌘</span><b>{refundSource?`Rimborso · ${selectedCategory}`:selectedCategory}</b><i>⌄</i></button></label>
-      <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedCard?.name || selectedAccount || "Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">Buoni pasto selezionato automaticamente</small>}</label>
+      <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedCard?.name || selectedAccount || "Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">{mealVoucherAccount?.name || "Buoni pasto"} selezionato automaticamente</small>}</label>
     </>}
     <label>Data<button type="button" className="date-wheel-trigger" onClick={()=>setDateOpen(true)}><span>◫</span><b>{formatItalianDate(selectedDateISO)}</b><i>›</i></button></label>
     {!planned && <div className="modal-toggle"><div><b>Contabilizzata</b><span>Disattivala se il movimento deve ancora essere verificato</span></div><button type="button" className={accounted?"on":""} onClick={()=>setAccounted(x=>!x)}><i/></button></div>}
@@ -920,7 +942,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><button type="button" onClick={()=>setCategoryOpen(false)}>×</button></div>
       <div className="category-search"><AppIcon name="search" size={15}/><input placeholder="Cerca categoria..." /></div>
       <div className="category-tree">
-        {categoryGroups.map(({root,children})=><div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:root.color,background:`${root.color}18`}}><AppIcon name={root.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expandedCategory===root.name?"up":"down"} size={15}/></i></button>{expandedCategory===root.name&&children.length>0&&<div className="subcategory-list">{children.map(child=><button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(child.name==="Buoni pasto"){setSelectedAccount("Buoni pasto");setSelectedCardId(null)};setCategoryOpen(false);if(child.name!=="Buoni pasto")setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:child.color,background:`${child.color}18`}}><AppIcon name={child.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>)}</div>}</div>)}
+        {categoryGroups.map(({root,children})=>{const rootStyle=categoryVisual(root);return <div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:rootStyle.color,background:`${rootStyle.color}18`}}><AppIcon name={rootStyle.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expandedCategory===root.name?"up":"down"} size={15}/></i></button>{expandedCategory===root.name&&children.length>0&&<div className="subcategory-list">{children.map(child=>{const childStyle=categoryVisual(child);const voucher=mealVoucherLeaf(child.name);return <button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(voucher){setSelectedAccount(mealVoucherAccount?.name || "Buoni pasto");setSelectedCardId(null)};setCategoryOpen(false);if(!voucher)setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:childStyle.color,background:`${childStyle.color}18`}}><AppIcon name={childStyle.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>})}</div>}</div>})}
       </div>
     </div>}
     {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setSelectedCardId(null);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}{cards.filter(card=>!card.archived).map(card=>{const linked=usableAccounts.find(account=>account.id===card.linkedAccountId);return <button type="button" key={card.id} onClick={()=>{setSelectedAccount(linked?.name||"");setSelectedCardId(card.id);setAccountOpen(false)}}><span><AppIcon name="card" size={18}/></span><b>{card.name}</b><strong>Carta di credito</strong></button>})}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
