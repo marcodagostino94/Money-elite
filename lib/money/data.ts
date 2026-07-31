@@ -151,6 +151,66 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
       }
     }
   }
+
+  // v3.0.2 targeted repair: Buoni pasto (entrata) belongs under Reddito,
+  // never under Guadagni, and always keeps the dedicated voucher icon.
+  // Existing databases may contain the old placement, so repair it safely
+  // without touching any other user category.
+  const { data: incomeRoots, error: incomeRootsError } = await supabase
+    .from("categories")
+    .select("id,name")
+    .eq("user_id", userId)
+    .eq("kind", "income")
+    .is("parent_id", null)
+    .in("name", ["Reddito", "Guadagni"]);
+  if (incomeRootsError) throw incomeRootsError;
+
+  const reddito = incomeRoots?.find(root => root.name === "Reddito");
+  const guadagni = incomeRoots?.find(root => root.name === "Guadagni");
+  if (reddito) {
+    const parentIds = [reddito.id, guadagni?.id].filter(Boolean) as string[];
+    const { data: voucherRows, error: voucherRowsError } = await supabase
+      .from("categories")
+      .select("id,parent_id,name")
+      .eq("user_id", userId)
+      .eq("kind", "income")
+      .ilike("name", "Buoni pasto")
+      .in("parent_id", parentIds);
+    if (voucherRowsError) throw voucherRowsError;
+
+    const correct = voucherRows?.find(row => row.parent_id === reddito.id);
+    const misplaced = voucherRows?.filter(row => guadagni && row.parent_id === guadagni.id) ?? [];
+
+    let targetId = correct?.id;
+    if (!targetId && misplaced.length) {
+      targetId = misplaced[0].id;
+      const { error: moveError } = await supabase.from("categories").update({
+        parent_id: reddito.id,
+        icon: "voucher",
+        color: seededChildColors["Buoni pasto"],
+      }).eq("id", targetId);
+      if (moveError) throw moveError;
+    } else if (targetId) {
+      const { error: styleError } = await supabase.from("categories").update({
+        icon: "voucher",
+        color: seededChildColors["Buoni pasto"],
+      }).eq("id", targetId);
+      if (styleError) throw styleError;
+    }
+
+    if (targetId) {
+      for (const duplicate of misplaced.filter(row => row.id !== targetId)) {
+        const [{ error: txError }, { error: recurrenceError }] = await Promise.all([
+          supabase.from("transactions").update({ category_id: targetId }).eq("category_id", duplicate.id),
+          supabase.from("recurrences").update({ category_id: targetId }).eq("category_id", duplicate.id),
+        ]);
+        if (txError) throw txError;
+        if (recurrenceError) throw recurrenceError;
+        const { error: deleteError } = await supabase.from("categories").delete().eq("id", duplicate.id);
+        if (deleteError) throw deleteError;
+      }
+    }
+  }
 }
 
 async function loadAllTransactions(supabase: SupabaseClient, userId: string) {
@@ -228,8 +288,12 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     notes: row.notes ?? "",
   }));
 
+  // A planned transaction is only a forecast until the user confirms it.
+  // Pending/future planned rows must never alter real account balances.
+  const effectiveTransactions = transactions.filter(transaction => !transaction.dueDate || Boolean(transaction.confirmedAt));
+
   const accounts: MoneyAccount[] = (rawAccounts ?? []).map(row => {
-    const relevant = transactions.filter(transaction => transaction.accountId === row.id || transaction.destinationAccountId === row.id);
+    const relevant = effectiveTransactions.filter(transaction => transaction.accountId === row.id || transaction.destinationAccountId === row.id);
     const delta = relevant.reduce((sum, transaction) => {
       if (transaction.kind === "transfer") {
         if (transaction.accountId === row.id) return sum - transaction.amount;

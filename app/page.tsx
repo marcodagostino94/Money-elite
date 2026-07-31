@@ -126,6 +126,9 @@ const shiftMonthKey = (monthKey: string, delta: number) => {
   return monthKeyFromDate(new Date(year,month-1+delta,1));
 };
 const dateInMonth = (isoDate: string | undefined, monthKey: string) => Boolean(isoDate?.startsWith(monthKey));
+// Planned transactions are forecasts until confirmation. Only effective transactions
+// may affect balances, budgets, card debt or financial summaries.
+const isEffectiveTransaction = (transaction: Transaction) => !transaction.dueDate || Boolean(transaction.confirmedAt);
 const cardCycleBounds = (monthKey: string, cycleStartDay: number) => {
   const [year, month] = monthKey.split("-").map(Number);
   const start = new Date(year, month-1, Math.max(1,Math.min(31,cycleStartDay)), 12);
@@ -392,7 +395,8 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, setActi
   const [chart, setChart] = useState<"wealth" | "week" | "month">("wealth");
   const today = toIsoDate(new Date());
   const currentMonth = today.slice(0,7);
-  const monthTransactions = transactions.filter(transaction=>transaction.dateISO?.startsWith(currentMonth) && (!transaction.dueDate || transaction.confirmedAt));
+  const effectiveTransactions = transactions.filter(isEffectiveTransaction);
+  const monthTransactions = effectiveTransactions.filter(transaction=>transaction.dateISO?.startsWith(currentMonth));
   const refunds = monthTransactions.filter(transaction=>transaction.isRefund).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const income = monthTransactions.filter(transaction=>transaction.amount>0&&!transaction.isRefund&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0);
   const expenses = Math.max(0,Math.abs(monthTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0))-refunds);
@@ -401,12 +405,12 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, setActi
   const savings = visibleAccounts.filter(account=>account.type==="savings").reduce((sum,account)=>sum+account.balance,0);
   const liquidity = visibleAccounts.filter(account=>account.type!=="savings").reduce((sum,account)=>sum+account.balance,0);
   const wealth = liquidity+savings;
-  const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,transactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
-  const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=transactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
+  const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,effectiveTransactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
+  const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
-  const weekExpenses = transactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
-  const monthExpenses = transactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const duePending = transactions.filter(item=>item.dueDate&&item.dueDate<=today&&!item.confirmedAt);
   const futurePlanned = transactions.filter(item=>item.dueDate&&!item.confirmedAt&&item.dueDate>today).slice(0,3);
   const recent = transactions.filter(item=>!item.dueDate||item.confirmedAt).slice(0,5);
@@ -586,7 +590,7 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
   const visibleTotal = activeAccounts.filter(account=>!account.hidden).reduce((sum,account)=>sum+account.balance,0);
   const detail = accounts.find(account=>account.id===detailId);
   if(detail) {
-    const accountTransactions = transactions.filter(transaction=>transaction.accountId===detail.id || transaction.destinationAccountId===detail.id);
+    const accountTransactions = transactions.filter(transaction=>isEffectiveTransaction(transaction) && (transaction.accountId===detail.id || transaction.destinationAccountId===detail.id));
     const monthChoices = (() => {
       const keys = accountTransactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x));
       const earliest = keys.length ? [...keys].sort()[0] : monthKeyFromDate(new Date());
@@ -645,9 +649,9 @@ function CreditCardsSection({ onAdd, cards, accounts, transactions, refresh, ope
   const [repay, setRepay] = useState(false);
   const visibleCards = cards.filter(card => !card.archived);
   const cycleRowsFor = (card: MoneyCard, monthKey: string) => {
-    if(card.periodType==="no_period") return transactions.filter(t=>t.cardId===card.id);
+    if(card.periodType==="no_period") return transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id);
     const {start,end}=cardCycleBounds(monthKey,card.cycleStartDay??1);
-    return transactions.filter(t=>t.cardId===card.id && Boolean(t.dateISO) && t.dateISO! >= start && t.dateISO! <= end);
+    return transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id && Boolean(t.dateISO) && t.dateISO! >= start && t.dateISO! <= end);
   };
   const debtFromRows = (rows: Transaction[]) => rows.reduce((sum,t)=>sum+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0);
   const currentCycleMonth = monthKeyFromDate(new Date());
@@ -753,7 +757,7 @@ function BudgetSection({ budgets, categories, transactions, refresh }: { budgets
   const [newBudget,setNewBudget]=useState(false);
   const month=toIsoDate(new Date()).slice(0,7);
   const visible=budgets.filter(item=>item.month.startsWith(month));
-  const details=visible.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=transactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(month)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {item,category,spent};});
+  const details=visible.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=transactions.filter(t=>isEffectiveTransaction(t)&&t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(month)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {item,category,spent};});
   const total=details.reduce((sum,item)=>sum+item.item.amount,0);const spent=details.reduce((sum,item)=>sum+item.spent,0);
   const remove=async(id:string)=>{if(!window.confirm("Eliminare questo budget?"))return;const {error}=await getSupabaseBrowserClient().from("budgets").delete().eq("id",id);if(error){alert(error.message);return;}await refresh();};
   return <section className="section-page"><div className="budget-month-row"><label>Mese<select value={month} disabled><option>{new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date())}</option></select></label><button className="outline" onClick={()=>setNewBudget(true)}>＋ Crea budget</button></div><div className="big-budget"><div><small>BUDGET TOTALI</small><h2>{money(total)}</h2></div><div><small>SPESO</small><h2>{money(spent)}</h2></div><div><small>DISPONIBILE</small><h2 className="positive">{money(total-spent)}</h2></div></div><div className="item-grid">{details.length?details.map(({item,category,spent})=><article className="item-card budget-card" key={item.id}><div className="item-body"><small>BUDGET MENSILE</small><h3>{category?.name||"Categoria"}</h3><div className="progress"><i style={{width:`${Math.min(100,spent/item.amount*100)}%`,background:category?.color||"#7c65b5"}}/></div><strong>{money(spent)} <span>di {money(item.amount)}</span></strong></div><button onClick={()=>void remove(item.id)} aria-label="Elimina budget"><AppIcon name="trash"/></button></article>):<div className="empty panel">Nessun budget per questo mese.</div>}</div>{newBudget&&<BudgetModal categories={categories} month={`${month}-01`} close={()=>setNewBudget(false)} refresh={refresh}/>}</section>;
@@ -881,7 +885,9 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [selectedCategory, setSelectedCategory] = useState(initial?.category || (kind === "income" ? "Reddito › Stipendio" : "Alimenti › Pranzi/Cene"));
   const mealVoucherAccount = accounts.find(account => account.type === "meal_vouchers");
   const voucherValue = mealVoucherAccount?.voucherUnitValue || 8;
-  const [voucherCount, setVoucherCount] = useState(initial?.voucherCount ?? Math.max(1, Math.round(Math.abs(initial?.amount ?? voucherValue) / voucherValue)));
+  const [voucherCount, setVoucherCount] = useState(() => String(initial?.voucherCount ?? Math.max(1, Math.round(Math.abs(initial?.amount ?? voucherValue) / voucherValue))));
+  const parsedVoucherCount = Number.parseInt(voucherCount, 10);
+  const validVoucherCount = Number.isFinite(parsedVoucherCount) && parsedVoucherCount > 0 ? parsedVoucherCount : 0;
   const [frequency, setFrequency] = useState<Transaction["frequency"]>(initial?.frequency ?? "monthly");
   const [intervalCount, setIntervalCount] = useState(initial?.intervalCount ?? 1);
   const [occurrenceLimit, setOccurrenceLimit] = useState(initial?.occurrenceLimit ?? 0);
@@ -901,11 +907,15 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const submit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const raw = parseItalianAmount(fd.get("amount"));
+    const raw = isMealVoucher ? validVoucherCount * voucherValue : parseItalianAmount(fd.get("amount"));
+    if (isMealVoucher && validVoucherCount < 1) {
+      alert("Inserisci il numero dei buoni pasto.");
+      return;
+    }
     const notes = String(fd.get("notes") ?? "").trim();
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
     const categoryTitle = selectedCategory.split("›").at(-1)?.trim() || selectedCategory;
-    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: isTransfer ? "Giroconto" : `${categoryTitle}${refundSource ? " (Rimborso)" : ""}`, category, account: isTransfer ? from : selectedAccount, notes, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, destinationAccountName: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? voucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency, intervalCount, occurrenceLimit: occurrenceLimit > 0 ? occurrenceLimit : null });
+    void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: isTransfer ? "Giroconto" : `${categoryTitle}${refundSource ? " (Rimborso)" : ""}`, category, account: isTransfer ? from : selectedAccount, notes, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, destinationAccountName: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? validVoucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency, intervalCount, occurrenceLimit: occurrenceLimit > 0 ? occurrenceLimit : null });
   };
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}>
     <div className={`modal-accent ${kind}`} />
@@ -913,9 +923,9 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
     {refundSource&&<div className="refund-source"><span>Spesa originale</span><b>{refundSource.label}</b><small>{money(Math.abs(refundSource.amount))} · {refundSource.account} · {refundSource.date}</small></div>}
     {isMealVoucher ? <div className="transaction-voucher-box">
       <div className="voucher-explainer"><span className="real-icon"><AppIcon name="voucher" size={21}/></span><div><b>{kind==="income"?"Carica buoni pasto":"Utilizza buoni pasto"}</b><small>Il valore unitario impostato nel conto è {money(voucherValue)}.</small></div></div>
-      <label>Numero di buoni<input name="voucherCount" type="text" inputMode="numeric" value={voucherCount} onChange={e=>setVoucherCount(Math.max(1, Number(e.target.value) || 1))}/></label>
-      <input name="amount" type="hidden" value={voucherCount*voucherValue}/>
-      <div className="voucher-calculation"><span>{voucherCount} × {money(voucherValue)}</span><strong>{money(voucherCount*voucherValue)}</strong></div>
+      <label>Numero di buoni<input name="voucherCount" type="text" inputMode="numeric" value={voucherCount} onChange={e=>setVoucherCount(e.target.value.replace(/\D/g,""))} required/></label>
+      <input name="amount" type="hidden" value={validVoucherCount*voucherValue}/>
+      <div className="voucher-calculation"><span>{voucherCount || "0"} × {money(voucherValue)}</span><strong>{money(validVoucherCount*voucherValue)}</strong></div>
     </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" defaultValue={initial?amountInput(Math.abs(initial.amount)):undefined}/></div></label>}
     {isTransfer ? <div className="transfer-fields">
       <label>Da<select value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value===to)setTo(usableAccounts.find(account=>account.name!==e.target.value)?.name||"")}}>{usableAccounts.map(account=><option key={account.id}>{account.name}</option>)}</select><small>Disponibile: {money(usableAccounts.find(account=>account.name===from)?.balance||0)}</small></label>
