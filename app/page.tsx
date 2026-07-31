@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -994,10 +994,18 @@ export default function Home() {
   const [dataBusy, setDataBusy] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const refreshSequence = useRef(0);
   const refreshData = async (activeUser = user) => {
     if (!activeUser) return;
+    const sequence = ++refreshSequence.current;
     try {
       const data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
+
+      // Saving a transaction triggers both the explicit refresh below and a
+      // Supabase realtime event. Never let an older/slower refresh overwrite a
+      // newer snapshot, otherwise balances can temporarily revert or jump.
+      if (sequence !== refreshSequence.current) return;
+
       setAccounts(data.accounts);
       setCategories(data.categories);
       setCards(data.cards);
@@ -1006,11 +1014,12 @@ export default function Home() {
       setTransactions(data.transactions.map(row => transactionFromDatabase(row, data.accounts, data.categories, data.cards)));
       setDataError("");
     } catch (error) {
+      if (sequence !== refreshSequence.current) return;
       console.error(error);
       const message = typeof error === "object" && error && "message" in error ? String(error.message) : "Errore sconosciuto";
       setDataError(`Sincronizzazione non completata: ${message}`);
     } finally {
-      setDataBusy(false);
+      if (sequence === refreshSequence.current) setDataBusy(false);
     }
   };
   const saveTransaction = async (transaction: Transaction) => {

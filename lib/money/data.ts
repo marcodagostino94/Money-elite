@@ -138,21 +138,43 @@ export async function ensureInitialData(supabase: SupabaseClient, userId: string
 async function loadAllTransactions(supabase: SupabaseClient, userId: string) {
   const pageSize = 1000;
   const rows: any[] = [];
+  let lastId: string | null = null;
 
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
+  // IMPORTANT: use keyset pagination instead of OFFSET/RANGE pagination.
+  // With more than 1,000 transactions, a realtime INSERT can arrive while the
+  // history is being loaded. OFFSET pagination would then shift page boundaries
+  // and could duplicate one old transaction while omitting another one, causing
+  // an unrelated account balance to jump after saving a new transaction.
+  for (;;) {
+    let query = supabase
       .from("transactions")
       .select("*")
       .eq("user_id", userId)
-      .order("transaction_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .range(from, from + pageSize - 1);
+      .order("id", { ascending: true })
+      .limit(pageSize);
 
+    if (lastId) query = query.gt("id", lastId);
+
+    const { data, error } = await query;
     if (error) throw error;
+
     const page = data ?? [];
     rows.push(...page);
     if (page.length < pageSize) break;
+
+    lastId = page[page.length - 1]?.id ?? null;
+    if (!lastId) break;
   }
+
+  // The UI expects the most recent transactions first. Pagination order is
+  // deliberately independent from display order so page boundaries stay stable.
+  rows.sort((a, b) => {
+    const dateCompare = String(b.transaction_date ?? "").localeCompare(String(a.transaction_date ?? ""));
+    if (dateCompare !== 0) return dateCompare;
+    const createdCompare = String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
+    if (createdCompare !== 0) return createdCompare;
+    return String(b.id ?? "").localeCompare(String(a.id ?? ""));
+  });
 
   return rows;
 }
