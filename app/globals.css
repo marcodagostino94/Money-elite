@@ -137,3 +137,76 @@ input,textarea,select{font-size:16px}
 .subscription-row{grid-template-columns:45px 1fr auto auto}
 .subscription-edit-area{cursor:pointer;outline:none}
 .subscription-edit-area:focus-visible{outline:2px solid #9fc0ff;outline-offset:4px;border-radius:8px}
+
+
+/* Money Elite v3.1 - UI & Readability */
+:root{
+  --font-ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-display:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --text-xs:13px;--text-sm:15px;--text-md:17px;--text-lg:20px;--text-xl:24px;--text-2xl:30px;--text-hero:46px;
+}
+html,body{font-family:var(--font-ui);font-size:16px;line-height:1.42}
+button,input,select,textarea{font-family:var(--font-ui)}
+p,span,small,b,strong,label,input,select,textarea,button{letter-spacing:-.005em}
+.balance-card h2,.balance-breakdown b,.stats-grid h3,.transaction-amount b,.item-body h3,.item-body strong,.big-budget h2,.budget-footer strong,.donut strong,.week-bar b,.pending-date b,.planned-date b,.pending-item>strong,.planned-item>strong,.subscription-body h3,.accounts-total strong,.cards-total strong,.account-row h3,.account-row>div:nth-child(2) strong,.credit-card-panel strong,.card-due-summary strong,.account-detail-summary strong,.balance-numbers strong,.card-debt,.money,.amount,.total{
+  font-family:var(--font-display)!important;font-variant-numeric:tabular-nums;letter-spacing:-.025em;
+}
+header h1,.section-intro h2,.panel-title h3,.modal-title h2,.inner-page-header h2,.settings-card h3,.category-report h3,.subscription-body h3,.pending-heading h3{
+  font-family:var(--font-display)!important;letter-spacing:-.025em;
+}
+.sidebar nav button{font-size:14px;padding:12px 13px;min-height:44px}
+.nav-title{font-size:11px}.profile b{font-size:14px}.profile small,.brand small{font-size:12px}
+header{height:104px;padding:24px 38px}header p{font-size:13px}header h1{font-size:30px;font-weight:750}
+.primary,.outline,.text-button{font-size:14px;font-weight:700}.primary,.outline{min-height:44px}
+.section-intro h2{font-size:30px;font-weight:780}.section-intro p{font-size:15px;line-height:1.5}
+.inner-page-header>button{width:44px;height:44px}.inner-page-header small{font-size:12px}.inner-page-header h2{font-size:27px;font-weight:760}.inner-page-header p{font-size:14px}
+.balance-card,.panel,.stats-grid article,.item-card,.big-budget{border-radius:16px}
+.balance-card{min-height:226px;padding:27px}.balance-card h2{font-size:46px;font-weight:760;line-height:1.05}
+.card-heading>span,.card-heading div>span{font-size:14px}.balance-card .up{font-size:13px}
+.balance-breakdown small{font-size:11px}.balance-breakdown b{font-size:18px;font-weight:720}.balance-breakdown em{font-size:11px!important}
+.stats-grid article{padding:21px 22px;gap:16px}.stat-icon{width:43px;height:43px}.stats-grid small{font-size:11px}.stats-grid h3{font-size:24px;font-weight:730}.stats-grid p{font-size:12px}
+.panel{padding:24px}.panel-title h3{font-size:20px;font-weight:760}.panel-title p{font-size:13px}.text-button{font-size:13px}
+.item-card{padding:22px;min-height:155px}.item-icon{width:48px;height:48px}.item-body small{font-size:12px}.item-body h3{font-size:20px;font-weight:720}.item-body strong{font-size:20px;font-weight:750}.add-card{min-height:155px;font-size:14px}
+.transaction-row{padding:16px 0;gap:14px;min-height:72px}.transaction-icon{width:46px;height:46px;border-radius:12px;flex:0 0 46px}.transaction-icon svg{width:22px;height:22px}
+.transaction-info b{font-size:17px;font-weight:760;line-height:1.22}.transaction-info span{font-size:14px;line-height:1.35;color:#777981;margin-top:5px}
+.transaction-amount{min-width:112px}.transaction-amount b{font-size:20px;font-weight:780;white-space:nowrap}.transaction-amount span{font-size:12px;margin-top:6px}
+.pending-heading{padding:18px 21px}.pending-badge{font-size:15px}.pending-heading h3{font-size:19px;font-weight:760}.pending-heading p{font-size:13px}
+.pending-item{grid-template-columns:48px 1fr auto auto;gap:14px;padding:18px 21px;min-height:86px}.pending-date,.planned-date{width:44px;height:48px}
+.pending-date b,.planned-date b{font-size:17px}.pending-date span,.planned-date span{font-size:10px}
+.pending-item>div:nth-child(2) b{font-size:16px}.pending-item>div:nth-child(2) span{font-size:13px}.pending-item>strong{font-size:18px}.pending-item>button{min-height:40px;font-size:13px;font-weight:750}
+.planned-item{padding:16px;min-height:78px}.planned-item>div:nth-child(2) b{font-size:16px}.planned-item>div:nth-child(2) span{font-size:13px}.planned-item>strong{font-size:18px}
+.planned-main b{font-size:16px!important}.planned-main span{font-size:13px!important}
+.subscription-row{grid-template-columns:52px 1fr auto auto;gap:16px;padding:20px 0}.subscription-body h3{font-size:18px;font-weight:760}.subscription-dates{font-size:12px}.subscription-body>strong{font-size:15px}.subscription-body>small{font-size:13px}
+.accounts-total,.cards-total{padding:21px 24px}.accounts-total small,.cards-total span{font-size:13px}.accounts-total strong,.cards-total strong{font-size:24px;font-weight:780}
+.account-row{padding:19px;grid-template-columns:50px 1fr 42px 42px;min-height:92px}.account-row>div:nth-child(2) small{font-size:12px}.account-row h3{font-size:19px;font-weight:760}.account-row>div:nth-child(2) strong{font-size:21px;font-weight:780}
+.credit-card-panel{padding:27px}.credit-card-panel small,.credit-card-panel span{font-size:13px}.credit-card-panel strong{font-size:22px}
+.budget-row b{font-size:15px}.budget-row span,.budget-row small{font-size:13px}.progress{height:8px}.budget-footer{font-size:15px}
+.settings-card h3{font-size:21px}.settings-card>label{grid-template-columns:210px 1fr;font-size:15px;padding:17px 0}.settings-card input,.settings-card select{min-height:46px;font-size:16px}.toggle-row b{font-size:15px}.toggle-row span{font-size:13px}.setting-note{font-size:14px}
+.filter-row label{min-height:52px}.filter-row input{font-size:16px}.filter-row select{min-height:52px!important;font-size:15px!important}.period-nav{min-height:56px}.period-nav strong,.period-select{font-size:16px!important}.period-nav button{min-height:40px;font-size:13px}
+.modal{width:min(550px,100%);padding:28px}.modal-title small{font-size:12px}.modal-title h2{font-size:26px;font-weight:780}.modal>label,.form-grid label{font-size:15px;font-weight:650}
+.modal input,.modal select,.modal textarea{min-height:52px;border-radius:11px;padding:12px 13px;font-size:16px}.modal textarea{min-height:100px}
+.amount-input span{font-family:var(--font-display);font-size:22px;font-weight:750}.amount-input input{padding-left:35px!important;font-family:var(--font-display)!important;font-size:34px!important;font-weight:780!important;height:66px!important}
+.modal-actions button,.cancel{min-height:50px;font-size:15px;font-weight:750}.category-select,.date-wheel-trigger{min-height:54px}.category-select>b,.date-wheel-trigger b{font-size:16px}
+.category-picker-title small{font-size:12px}.category-picker-title h3{font-size:24px}.category-search{min-height:52px}.category-group>button{min-height:58px}.category-group>button span{width:40px;height:40px}.category-group>button b{font-size:16px}.category-group>button small{font-size:13px}
+.quick-main{width:60px;height:60px}.quick-menu button{min-height:50px;padding:7px 17px 7px 7px;font-size:16px;font-weight:750}.quick-icon{width:38px;height:38px}
+.account-menu button,.transaction-detail-menu button{min-height:50px;font-size:16px}
+
+@media(max-width:620px){
+  header{height:88px;padding:16px 14px 14px 56px}header h1{font-size:25px;font-weight:800}.page-content{padding:22px 14px 106px}
+  .section-intro h2{font-size:27px}.section-intro p{font-size:14px}.balance-card{padding:23px}.balance-card h2{font-size:39px}
+  .balance-breakdown small{font-size:10px}.balance-breakdown b{font-size:15px}.stats-grid article{padding:18px}.stats-grid h3{font-size:22px}
+  .panel{padding:19px}.panel-title h3{font-size:19px}.transaction-row{padding:15px 0;gap:12px;min-height:74px}.transaction-icon{width:44px;height:44px;flex-basis:44px}
+  .transaction-info b{font-size:17px}.transaction-info span{font-size:13px}.transaction-amount{min-width:96px}.transaction-amount b{font-size:19px}.transaction-amount span{font-size:11px}
+  .pending-items{grid-template-columns:1fr}.pending-item{grid-template-columns:46px 1fr auto;gap:12px;padding:16px 17px}.pending-item>strong{grid-column:2}.pending-item>button{grid-column:3;grid-row:1/3}
+  .accounts-total strong,.cards-total strong{font-size:22px}.account-row{grid-template-columns:46px 1fr 40px 40px;padding:16px}.account-row h3{font-size:18px}.account-row>div:nth-child(2) strong{font-size:20px}
+  .filter-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.filter-row label{grid-column:1/3;min-height:54px}.filter-row select{width:100%;max-width:none}
+  .modal{padding:24px 19px calc(22px + env(safe-area-inset-bottom))}.modal-title h2{font-size:25px}.modal input,.modal select,.modal textarea{min-height:54px}.amount-input input{font-size:36px!important;height:70px!important}
+  .form-grid{grid-template-columns:1fr}.category-group>button{min-height:62px}.category-group>button b{font-size:17px}
+  .quick-main{width:62px;height:62px}.quick-menu button{min-height:54px;font-size:17px}.quick-icon{width:40px;height:40px}
+  .settings-card>label{grid-template-columns:1fr}.settings-card input,.settings-card select{width:100%}
+  .subscription-row{grid-template-columns:48px 1fr 38px}.subscription-body h3{font-size:17px}.inner-page-header h2{font-size:25px}
+}
+@media(max-width:380px){
+  .transaction-info b{font-size:16px}.transaction-info span{font-size:12px}.transaction-amount{min-width:88px}.transaction-amount b{font-size:18px}.balance-card h2{font-size:35px}
+  .filter-row{grid-template-columns:1fr}.filter-row label{grid-column:auto}
+}
