@@ -397,7 +397,7 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
   );
 }
 
-function Dashboard({ transactions, accounts, cards, budgets, categories, dashboardAccountIds, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; dashboardAccountIds: string[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
+function Dashboard({ transactions, accounts, cards, budgets, categories, recurrences, dashboardAccountIds, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; recurrences: MoneyRecurrence[]; dashboardAccountIds: string[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
   const [chart, setChart] = useState<"week" | "month">("week");
   const today = toIsoDate(new Date());
   const currentMonth = today.slice(0,7);
@@ -420,8 +420,13 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, dashboa
   const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
   const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
-  const duePending = transactions.filter(item=>item.dueDate&&item.dueDate<=today&&!item.confirmedAt);
-  const futurePlanned = transactions.filter(item=>item.dueDate&&!item.confirmedAt&&item.dueDate>today).slice(0,3);
+  const duePending = transactions
+    .filter(item=>Boolean(item.recurrenceId)&&!item.confirmedAt&&Boolean(item.dueDate||item.dateISO)&&(item.dueDate||item.dateISO||"")<=today)
+    .sort((a,b)=>(a.dueDate||a.dateISO||"").localeCompare(b.dueDate||b.dateISO||""));
+  const futurePlanned = recurrences
+    .filter(item=>item.active&&!item.isSubscription&&item.nextDate>today)
+    .sort((a,b)=>a.nextDate.localeCompare(b.nextDate))
+    .slice(0,5);
   const recent = transactions.filter(item=>!item.dueDate||item.confirmedAt).slice(0,5);
   const currentMonthLabel = new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date());
   return (
@@ -436,10 +441,15 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, dashboa
       <section className="dashboard-overview-grid">
         <button className="dashboard-month-balance panel" onClick={()=>setActive("Bilancio")}>
           <div className="panel-title"><div><h3>Bilancio del mese</h3><p>{currentMonthLabel}</p></div><AppIcon name="forward" size={18}/></div>
-          <div className="dashboard-balance-lines">
-            <div><span><i className="income-dot"/>Entrate</span><strong className="positive">{money(income)}</strong></div>
-            <div><span><i className="expense-dot"/>Uscite</span><strong>{money(-expenses)}</strong></div>
-            <div className="total"><span>Saldo del mese</span><strong className={balance>=0?"positive":""}>{money(balance)}</strong></div>
+          <div className="dashboard-balance-content">
+            <div className="dashboard-balance-donut" style={{background:`conic-gradient(#7051bf 0 ${income+expenses>0?Math.round((expenses/(income+expenses))*100):0}%,#d8d0ec ${income+expenses>0?Math.round((expenses/(income+expenses))*100):0}% 100%)`}}>
+              <div><strong>{money(balance)}</strong><span>SALDO</span></div>
+            </div>
+            <div className="dashboard-balance-lines">
+              <div><span><i className="income-dot"/>Entrate</span><strong className="positive">{money(income)}</strong></div>
+              <div><span><i className="expense-dot"/>Uscite</span><strong>{money(-expenses)}</strong></div>
+              <div className="total"><span>Saldo del mese</span><strong className={balance>=0?"positive":""}>{money(balance)}</strong></div>
+            </div>
           </div>
         </button>
 
@@ -461,6 +471,11 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, dashboa
           <div><small>RISPARMI</small><b>{money(savings)}</b></div>
         </div>
       </button>
+
+      <section className="panel insight-panel dashboard-wealth-chart">
+        <div className="panel-title"><div><h3>Andamento patrimonio</h3><p>Evoluzione del patrimonio complessivo</p></div><button className="text-button" onClick={()=>setActive("Report")}>Report →</button></div>
+        <div className="insight-chart"><div><small>PATRIMONIO ATTUALE</small><h3>{money(wealth)}</h3></div><Sparkline mode="wealth"/></div>
+      </section>
 
       <section className="panel insight-panel dashboard-spending-chart">
         <div className="panel-title dashboard-chart-title"><div><h3>Grafici delle spese</h3><p>Controlla l'andamento delle uscite effettive</p></div></div>
@@ -494,7 +509,13 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, dashboa
         <article className="panel planned-panel">
           <div className="panel-title"><div><h3>Transazioni pianificate</h3><p>I prossimi movimenti previsti</p></div><button className="text-button" onClick={() => setActive("Pianificate")}>Gestisci →</button></div>
           <div className="planned-grid">
-            {futurePlanned.map(item=><button className="planned-item" key={item.id} onClick={()=>openTransaction(item)}><div className="planned-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.account}{item.notes?.trim()?` • ${item.notes.trim()}`:""}</span></div><strong>{money(item.amount)}</strong></button>)}
+            {futurePlanned.map(item=>{
+              const category=categories.find(category=>category.id===item.categoryId);
+              const account=cards.find(card=>card.id===item.cardId)?.name||accounts.find(account=>account.id===item.accountId)?.name||"Conto";
+              const signedAmount=item.kind==="expense"?-Math.abs(item.amount):Math.abs(item.amount);
+              const date=formatItalianDate(item.nextDate).split(" ");
+              return <button className="planned-item" key={item.id} onClick={()=>setActive("Pianificate")}><div className="planned-date"><b>{date[0]}</b><span>{date[1]}</span></div><div><b>{category?.name||item.notes||"Pianificata"}</b><span>{account}{item.notes?.trim()?` • ${item.notes.trim()}`:""}</span></div><strong className={signedAmount>0?"positive":""}>{money(signedAmount)}</strong></button>;
+            })}
             {!futurePlanned.length&&<div className="empty">Nessuna transazione pianificata in arrivo.</div>}
           </div>
         </article>
@@ -1387,7 +1408,7 @@ export default function Home() {
         <Header active={active} />
         <div className="page-content">
           {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
-          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} recurrences={recurrences} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}

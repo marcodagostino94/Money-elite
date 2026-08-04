@@ -373,3 +373,75 @@ header h1{font-size:27px}
   .panel-title h3{font-size:18px}
   .amount-input input{font-size:32px!important}
 }
+
+
+/* Dashboard 2.1 - correzioni confermate */
+.dashboard-balance-content{
+  display:grid;
+  grid-template-columns:150px minmax(0,1fr);
+  gap:22px;
+  align-items:center;
+}
+.dashboard-balance-donut{
+  width:138px;height:138px;border-radius:50%;
+  display:grid;place-items:center;
+  position:relative;
+}
+.dashboard-balance-donut:before{
+  content:"";position:absolute;width:88px;height:88px;border-radius:50%;background:#fff;
+}
+.dashboard-balance-donut>div{position:relative;text-align:center;z-index:1}
+.dashboard-balance-donut strong{
+  display:block;font-family:var(--font-display);font-size:18px;font-weight:780;
+  font-variant-numeric:tabular-nums;letter-spacing:-.025em;
+}
+.dashboard-balance-donut span{display:block;margin-top:3px;font-size:10px;color:#96939d;letter-spacing:.11em}
+.dashboard-wealth-chart{margin-bottom:12px}
+.dashboard-wealth-chart .insight-chart{min-height:225px}
+.dashboard-spending-chart{margin-bottom:12px}
+
+/* Riduzione tipografica globale: mantiene la leggibilità senza effetto zoom. */
+header h1{font-size:25px!important}
+.section-intro h2{font-size:25px!important}
+.inner-page-header h2{font-size:23px!important}
+.panel-title h3{font-size:17px!important}
+.balance-card h2{font-size:36px!important}
+.balance-breakdown b{font-size:15px!important}
+.stats-grid h3{font-size:20px!important}
+.transaction-info b{font-size:15px!important}
+.transaction-info span{font-size:12px!important}
+.transaction-amount b{font-size:17px!important}
+.transaction-amount span{font-size:11px!important}
+.accounts-total strong,.cards-total strong{font-size:20px!important}
+.account-row h3{font-size:17px!important}
+.account-row>div:nth-child(2) strong{font-size:18px!important}
+.dashboard-balance-lines strong{font-size:18px!important}
+.dashboard-account-list b{font-size:14px!important}
+.dashboard-account-list strong{font-size:15px!important}
+.quick-menu button{font-size:14px!important}
+.amount-input input{font-size:29px!important}
+
+@media(max-width:620px){
+  .dashboard-balance-content{grid-template-columns:118px minmax(0,1fr);gap:14px}
+  .dashboard-balance-donut{width:112px;height:112px}
+  .dashboard-balance-donut:before{width:70px;height:70px}
+  .dashboard-balance-donut strong{font-size:15px}
+  .dashboard-balance-donut span{font-size:9px}
+  header h1{font-size:22px!important}
+  .section-intro h2{font-size:23px!important}
+  .inner-page-header h2{font-size:22px!important}
+  .balance-card h2{font-size:33px!important}
+  .panel-title h3{font-size:16px!important}
+  .transaction-info b{font-size:15px!important}
+  .transaction-info span{font-size:12px!important}
+  .transaction-amount b{font-size:17px!important}
+  .dashboard-month-balance,.dashboard-accounts-card{padding:16px}
+  .dashboard-account-list>button{min-height:48px}
+  .dashboard-wealth-chart .insight-chart{min-height:205px}
+  .quick-menu button{font-size:14px!important}
+  .amount-input input{font-size:30px!important}
+}
+@media(max-width:390px){
+  .dashboard-balance-content{grid-template-columns:1fr}
+  .dashboard-balance-donut{margin:0 auto}
+}
