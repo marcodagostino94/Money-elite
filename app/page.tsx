@@ -59,6 +59,12 @@ type AccountDraft = {
   notes: string;
 };
 
+type DashboardPreferences = {
+  accountIds: string[];
+};
+
+const DASHBOARD_PREFERENCES_KEY = "money-elite-dashboard-preferences-v1";
+
 const nav: { label: Section; icon: string }[] = [
   { label: "Dashboard", icon: "dashboard" },
   { label: "Bilancio", icon: "balance" },
@@ -391,8 +397,8 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
   );
 }
 
-function Dashboard({ transactions, accounts, cards, budgets, categories, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
-  const [chart, setChart] = useState<"wealth" | "week" | "month">("wealth");
+function Dashboard({ transactions, accounts, cards, budgets, categories, dashboardAccountIds, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; dashboardAccountIds: string[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
+  const [chart, setChart] = useState<"week" | "month">("week");
   const today = toIsoDate(new Date());
   const currentMonth = today.slice(0,7);
   const effectiveTransactions = transactions.filter(isEffectiveTransaction);
@@ -402,79 +408,95 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, setActi
   const expenses = Math.max(0,Math.abs(monthTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0))-refunds);
   const balance = income-expenses;
   const visibleAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
+  const dashboardAccounts = dashboardAccountIds
+    .map(id=>visibleAccounts.find(account=>account.id===id))
+    .filter((account): account is MoneyAccount=>Boolean(account));
   const savings = visibleAccounts.filter(account=>account.type==="savings").reduce((sum,account)=>sum+account.balance,0);
   const liquidity = visibleAccounts.filter(account=>account.type!=="savings").reduce((sum,account)=>sum+account.balance,0);
   const wealth = liquidity+savings;
   const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,effectiveTransactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
   const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
-  const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
-  const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const duePending = transactions.filter(item=>item.dueDate&&item.dueDate<=today&&!item.confirmedAt);
   const futurePlanned = transactions.filter(item=>item.dueDate&&!item.confirmedAt&&item.dueDate>today).slice(0,3);
   const recent = transactions.filter(item=>!item.dueDate||item.confirmedAt).slice(0,5);
+  const currentMonthLabel = new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date());
   return (
     <>
       {duePending.length > 0 && <section className="pending-confirmations panel">
         <div className="pending-heading"><div><span className="pending-badge">●</span><div><h3>Da confermare</h3><p>{duePending.length} {duePending.length === 1 ? "transazione pianificata richiede" : "transazioni pianificate richiedono"} la tua conferma</p></div></div><button onClick={()=>setActive("Pianificate")}>Vedi pianificate →</button></div>
         <div className="pending-items">
-          {duePending.map(item=><div className="pending-item" key={item.id}><div className="pending-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><strong>{money(item.amount)}</strong><button onClick={()=>void confirmTransaction(item)}>Conferma</button></div>)}
+          {duePending.map(item=><div className="pending-item" key={item.id}><div className="pending-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.account}{item.notes?.trim()?` • ${item.notes.trim()}`:""}</span></div><strong>{money(item.amount)}</strong><button onClick={()=>void confirmTransaction(item)}>Conferma</button></div>)}
         </div>
       </section>}
 
-      <section className="hero-grid">
-        <button className="balance-card dark heritage-link" onClick={()=>setActive("Conti")}>
-          <div className="card-heading"><span>Patrimonio totale dei conti</span><AppIcon name="forward" size={18}/></div>
-          <h2>{money(wealth)}</h2>
-          <div className="balance-breakdown">
-            <div><small>LIQUIDITÀ</small><b>{money(liquidity)}</b></div>
-            <div><small>CARTA DI CREDITO</small><b className="card-debt">{money(-cardDebt)}</b></div>
-            <div><small>RISPARMI</small><b>{money(savings)}</b></div>
+      <section className="dashboard-overview-grid">
+        <button className="dashboard-month-balance panel" onClick={()=>setActive("Bilancio")}>
+          <div className="panel-title"><div><h3>Bilancio del mese</h3><p>{currentMonthLabel}</p></div><AppIcon name="forward" size={18}/></div>
+          <div className="dashboard-balance-lines">
+            <div><span><i className="income-dot"/>Entrate</span><strong className="positive">{money(income)}</strong></div>
+            <div><span><i className="expense-dot"/>Uscite</span><strong>{money(-expenses)}</strong></div>
+            <div className="total"><span>Saldo del mese</span><strong className={balance>=0?"positive":""}>{money(balance)}</strong></div>
           </div>
         </button>
-        <article className="balance-card balance-summary">
-          <div className="balance-visual"><div className="balance-ring"><div><strong>{money(balance)}</strong><span>BILANCIO</span></div></div><small>{new Intl.DateTimeFormat("it-IT",{month:"long",year:"numeric"}).format(new Date()).toUpperCase()}</small></div>
-          <div className="balance-numbers">
-            <div><span><i className="income-dot"/>Entrate</span><strong>{money(income)}</strong></div>
-            <div><span><i className="expense-dot"/>Uscite</span><strong>{money(-expenses)}</strong></div>
-            <div className="total"><span>Totale</span><strong>{money(balance)}</strong></div>
+
+        <article className="dashboard-accounts-card panel">
+          <div className="panel-title"><div><h3>Conti</h3><p>I saldi che vuoi controllare subito</p></div><button className="text-button" onClick={()=>setActive("Impostazioni")}>Preferenze</button></div>
+          <div className="dashboard-account-list">
+            {dashboardAccounts.map(account=><button key={account.id} onClick={()=>setActive("Conti")}><span className="dashboard-account-icon"><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}
+            {!dashboardAccounts.length&&<div className="dashboard-empty-accounts">Scegli i conti da mostrare nelle Impostazioni.</div>}
           </div>
         </article>
       </section>
 
-      <section className="panel insight-panel">
-        <div className="chart-tabs">
-          <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>{money(wealth)}</b></button>
-          <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Spese ultimi 7 giorni</span><b>{money(weekExpenses)}</b></button>
-          <button className={chart==="month"?"active":""} onClick={()=>setChart("month")}><span>Spese ultimi 30 giorni</span><b>{money(monthExpenses)}</b></button>
+      <button className="balance-card dark heritage-link dashboard-wealth-card" onClick={()=>setActive("Conti")}>
+        <div className="card-heading"><span>Patrimonio totale</span><AppIcon name="forward" size={18}/></div>
+        <h2>{money(wealth)}</h2>
+        <div className="balance-breakdown">
+          <div><small>LIQUIDITÀ</small><b>{money(liquidity)}</b></div>
+          <div><small>CARTA DI CREDITO</small><b className="card-debt">{money(-cardDebt)}</b></div>
+          <div><small>RISPARMI</small><b>{money(savings)}</b></div>
         </div>
-        <div className="insight-chart"><div><small>{chart==="wealth"?"PATRIMONIO ATTUALE":chart==="week"?"ULTIMI 7 GIORNI":"ULTIMI 30 GIORNI"}</small><h3>{chart==="wealth"?money(wealth):chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(monthExpenses)}</h3></div><Sparkline mode={chart}/></div>
+      </button>
+
+      <section className="panel insight-panel dashboard-spending-chart">
+        <div className="panel-title dashboard-chart-title"><div><h3>Grafici delle spese</h3><p>Controlla l'andamento delle uscite effettive</p></div></div>
+        <div className="chart-tabs spending-tabs">
+          <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Ultimi 7 giorni</span><b>{money(weekExpenses)}</b></button>
+          <button className={chart==="month"?"active":""} onClick={()=>setChart("month")}><span>Ultimi 30 giorni</span><b>{money(monthExpenses)}</b></button>
+        </div>
+        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"SPESA MENSILE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(monthExpenses)}</h3></div><Sparkline mode={chart}/></div>
       </section>
 
       <section className="dashboard-stack">
+        <article className="panel budget-panel dashboard-budget">
+          <div className="panel-title"><div><h3>Budget mensili</h3><p>{currentMonthLabel}</p></div><button className="text-button" onClick={() => setActive("Budget")}>Gestisci →</button></div>
+          <div className="dashboard-budget-grid">{dashboardBudgets.map((b) => (
+            <div className="budget-row" key={b.name}>
+              <div><b>{b.name}</b><span>{money(b.spent)} di {money(b.limit)}</span></div>
+              <div className="progress"><i style={{ width: `${Math.min(100,(b.spent / b.limit) * 100)}%`, background: b.color }} /></div>
+              <small>{Math.round((b.spent / b.limit) * 100)}%</small>
+            </div>
+          ))}{!dashboardBudgets.length&&<div className="empty">Nessun budget creato per questo mese.</div>}</div>
+          {dashboardBudgets.length>0&&<div className="budget-footer"><span>Budget disponibile</span><strong>{money(dashboardBudgets.reduce((sum,item)=>sum+item.limit-item.spent,0))}</strong></div>}
+        </article>
+
         <article className="panel transactions dashboard-list">
           <div className="panel-title"><div><h3>Transazioni recenti</h3><p>Gli ultimi movimenti registrati</p></div><button className="text-button" onClick={() => setActive("Transazioni")}>Vedi tutte →</button></div>
           <div className="transaction-list">
             {recent.map((t) => <TransactionRow key={t.id} t={t} onOpen={openTransaction} />)}
           </div>
         </article>
+
         <article className="panel planned-panel">
           <div className="panel-title"><div><h3>Transazioni pianificate</h3><p>I prossimi movimenti previsti</p></div><button className="text-button" onClick={() => setActive("Pianificate")}>Gestisci →</button></div>
           <div className="planned-grid">
-            {futurePlanned.map(item=><button className="planned-item" key={item.id} onClick={()=>openTransaction(item)}><div className="planned-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.category} · {item.account}</span></div><strong>{money(item.amount)}</strong></button>)}
+            {futurePlanned.map(item=><button className="planned-item" key={item.id} onClick={()=>openTransaction(item)}><div className="planned-date"><b>{item.date.split(" ")[0]}</b><span>{item.date.split(" ")[1]}</span></div><div><b>{item.label}</b><span>{item.account}{item.notes?.trim()?` • ${item.notes.trim()}`:""}</span></div><strong>{money(item.amount)}</strong></button>)}
+            {!futurePlanned.length&&<div className="empty">Nessuna transazione pianificata in arrivo.</div>}
           </div>
-        </article>
-        <article className="panel budget-panel dashboard-budget">
-          <div className="panel-title"><div><h3>Budget mensili</h3><p>Luglio 2026</p></div><button className="text-button" onClick={() => setActive("Budget")}>Gestisci →</button></div>
-          <div className="dashboard-budget-grid">{dashboardBudgets.map((b) => (
-            <div className="budget-row" key={b.name}>
-              <div><b>{b.name}</b><span>{money(b.spent)} di {money(b.limit)}</span></div>
-              <div className="progress"><i style={{ width: `${(b.spent / b.limit) * 100}%`, background: b.color }} /></div>
-              <small>{Math.round((b.spent / b.limit) * 100)}%</small>
-            </div>
-          ))}{!dashboardBudgets.length&&<div className="empty">Nessun budget creato per questo mese.</div>}</div>
-          {dashboardBudgets.length>0&&<div className="budget-footer"><span>Budget disponibile</span><strong>{money(dashboardBudgets.reduce((sum,item)=>sum+item.limit-item.spent,0))}</strong></div>}
         </article>
       </section>
     </>
@@ -522,7 +544,7 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
-function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, editRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
+function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, dashboardAccountIds, onChangeDashboardAccounts, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, editRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids:string[])=>void; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
   const legacyCards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
     Conti: [
       { name: "Conto principale", sub: "Banca ·•• 4832", value: "€ 8.940,65", icon: "B" },
@@ -540,7 +562,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   };
   if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
   if (section === "Report") return <ReportSection />;
-  if (section === "Impostazioni") return <SettingsSection />;
+  if (section === "Impostazioni") return <SettingsSection accounts={accounts} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} />;
   if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
@@ -835,7 +857,14 @@ function CategoryManagement() {
   </article>;
 }
 
-function SettingsSection() {
+function SettingsSection({ accounts, dashboardAccountIds, onChangeDashboardAccounts }: { accounts: MoneyAccount[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids: string[]) => void }) {
+  const selectableAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
+  const toggleDashboardAccount = (accountId:string) => {
+    const next = dashboardAccountIds.includes(accountId)
+      ? dashboardAccountIds.filter(id=>id!==accountId)
+      : [...dashboardAccountIds,accountId];
+    onChangeDashboardAccounts(next);
+  };
   return (
     <section className="section-page settings-page">
       <div className="section-toolbar"><button className="primary">Salva modifiche</button></div>
@@ -847,6 +876,19 @@ function SettingsSection() {
         <div className="toggle-row"><div><b>Sezione debiti</b><span>Mostra debiti e crediti nel menu</span></div><input type="checkbox" defaultChecked /></div>
         <div className="toggle-row"><div><b>Notifiche budget</b><span>Avvisami quando raggiungo l’80%</span></div><input type="checkbox" defaultChecked /></div>
       </article>
+
+      <article className="panel settings-card dashboard-preferences">
+        <div className="dashboard-preferences-heading"><div><h3>Dashboard</h3><p>Scegli i conti da mostrare nella card Conti. Il totale resta visibile solo nel Patrimonio.</p></div><span>{dashboardAccountIds.length} selezionati</span></div>
+        <div className="dashboard-account-preferences">
+          {selectableAccounts.map(account=><label key={account.id}>
+            <span className="dashboard-preference-icon"><AppIcon name={account.icon} size={18}/></span>
+            <span><b>{account.name}</b><small>{money(account.balance)}</small></span>
+            <input type="checkbox" checked={dashboardAccountIds.includes(account.id)} onChange={()=>toggleDashboardAccount(account.id)}/>
+          </label>)}
+          {!selectableAccounts.length&&<div className="empty">Nessun conto disponibile.</div>}
+        </div>
+      </article>
+
       <CategoryManagement />
       <article className="panel settings-card"><h3>Dati e sicurezza</h3><p className="setting-note">La struttura è predisposta per Supabase. Configura le variabili del progetto per attivare sincronizzazione, backup e accesso protetto.</p><button className="outline">Esporta tutti i dati</button></article>
     </section>
@@ -1014,6 +1056,15 @@ export default function Home() {
   const [modal, setModal] = useState<{ kind: ActionKind; preset: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction; recurrenceEditId?: string } | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<MoneyAccount[]>([]);
+  const [dashboardAccountIds, setDashboardAccountIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(DASHBOARD_PREFERENCES_KEY) || "{}") as DashboardPreferences;
+      return Array.isArray(saved.accountIds) ? saved.accountIds : [];
+    } catch {
+      return [];
+    }
+  });
   const [categories, setCategories] = useState<MoneyCategory[]>([]);
   const [cards, setCards] = useState<MoneyCard[]>([]);
   const [budgets, setBudgets] = useState<MoneyBudget[]>([]);
@@ -1306,6 +1357,20 @@ export default function Home() {
     await refreshData();
   };
 
+
+  useEffect(() => {
+    if (!accounts.length || dashboardAccountIds.length) return;
+    const defaults = accounts.filter(account=>!account.archived&&!account.hidden).slice(0,4).map(account=>account.id);
+    if (!defaults.length) return;
+    setDashboardAccountIds(defaults);
+    window.localStorage.setItem(DASHBOARD_PREFERENCES_KEY, JSON.stringify({accountIds:defaults} satisfies DashboardPreferences));
+  }, [accounts, dashboardAccountIds.length]);
+
+  const updateDashboardAccounts = (ids:string[]) => {
+    setDashboardAccountIds(ids);
+    window.localStorage.setItem(DASHBOARD_PREFERENCES_KEY, JSON.stringify({accountIds:ids} satisfies DashboardPreferences));
+  };
+
   const choose = (s: Section) => { setActive(s); setMobileNav(false); };
   if (!authReady) {
     return <main className="auth-loading"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><span>Caricamento sicuro…</span></main>;
@@ -1322,7 +1387,7 @@ export default function Home() {
         <Header active={active} />
         <div className="page-content">
           {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
-          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}
