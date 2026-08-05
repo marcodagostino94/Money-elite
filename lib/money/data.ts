@@ -73,6 +73,8 @@ export type MoneyRecurrence = {
   frequency: "daily" | "weekly" | "monthly" | "yearly";
   intervalCount: number;
   occurrenceLimit: number | null;
+  occurrenceCount: number;
+  endDate: string | null;
   automaticAccounting: boolean;
   isSubscription: boolean;
   active: boolean;
@@ -345,6 +347,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     id: row.id, accountId: row.account_id, destinationAccountId: row.destination_account_id, cardId: row.card_id, categoryId: row.category_id,
     kind: row.kind, amount: Number(row.amount), nextDate: row.next_date, frequency: row.frequency,
     intervalCount: Number(row.interval_count ?? 1), occurrenceLimit: row.occurrence_limit == null ? null : Number(row.occurrence_limit),
+    occurrenceCount: Number(row.occurrence_count ?? 0), endDate: row.end_date ?? null,
     automaticAccounting: Boolean(row.automatic_accounting), isSubscription: Boolean(row.is_subscription), active: Boolean(row.active), notes: row.notes ?? "",
   }));
   return { accounts, categories, transactions, cards, budgets, recurrences };

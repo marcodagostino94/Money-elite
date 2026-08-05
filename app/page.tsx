@@ -49,6 +49,7 @@ type Transaction = {
   frequency?: "daily" | "weekly" | "monthly" | "yearly";
   intervalCount?: number;
   occurrenceLimit?: number | null;
+  recurrencePlaceholder?: boolean;
 };
 
 type AccountDraft = {
@@ -119,6 +120,30 @@ const amountInput = (value: number | null | undefined) => value == null ? "" : v
 const addOneMonth = (isoDate: string) => {
   const date = new Date(`${isoDate}T12:00:00`);
   date.setMonth(date.getMonth()+1);
+  return toIsoDate(date);
+};
+
+const nextRecurrenceDate = (recurrence: MoneyRecurrence) => {
+  const interval = Math.max(1, recurrence.intervalCount || 1);
+  const date = new Date(`${recurrence.nextDate}T12:00:00`);
+  if (recurrence.frequency === "daily") date.setDate(date.getDate() + interval);
+  if (recurrence.frequency === "weekly") date.setDate(date.getDate() + (7 * interval));
+  if (recurrence.frequency === "monthly") {
+    const originalDay = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + interval);
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(originalDay, lastDay));
+  }
+  if (recurrence.frequency === "yearly") {
+    const originalMonth = date.getMonth();
+    const originalDay = date.getDate();
+    date.setDate(1);
+    date.setFullYear(date.getFullYear() + interval);
+    date.setMonth(originalMonth);
+    const lastDay = new Date(date.getFullYear(), originalMonth + 1, 0).getDate();
+    date.setDate(Math.min(originalDay, lastDay));
+  }
   return toIsoDate(date);
 };
 
@@ -420,8 +445,41 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
   const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
-  const duePending = transactions
-    .filter(item=>Boolean(item.recurrenceId)&&!item.confirmedAt&&Boolean(item.dueDate||item.dateISO)&&(item.dueDate||item.dateISO||"")<=today)
+  const duePending = recurrences
+    .filter(item=>item.active&&item.nextDate<=today)
+    .map(recurrence=>{
+      const existing = transactions.find(item=>item.recurrenceId===recurrence.id&&!item.confirmedAt&&(item.dueDate||item.dateISO)===recurrence.nextDate);
+      if (existing) return existing;
+      const account = accounts.find(item=>item.id===recurrence.accountId);
+      const card = cards.find(item=>item.id===recurrence.cardId);
+      const destination = accounts.find(item=>item.id===recurrence.destinationAccountId);
+      const category = categories.find(item=>item.id===recurrence.categoryId);
+      const amount = recurrence.kind==="expense" ? -Math.abs(recurrence.amount) : Math.abs(recurrence.amount);
+      return {
+        id:`recurrence:${recurrence.id}:${recurrence.nextDate}`,
+        label:recurrence.kind==="transfer"?"Giroconto":category?.name||recurrence.notes||"Pianificata",
+        category:category?.name||"Senza categoria",
+        account:card?.name||account?.name||"Conto archiviato",
+        notes:recurrence.notes,
+        destinationAccountName:destination?.name||null,
+        accountId:recurrence.accountId||undefined,
+        cardId:recurrence.cardId,
+        destinationAccountId:recurrence.destinationAccountId,
+        categoryId:recurrence.categoryId,
+        recurrenceId:recurrence.id,
+        date:formatItalianDate(recurrence.nextDate),
+        dateISO:recurrence.nextDate,
+        dueDate:recurrence.nextDate,
+        confirmedAt:null,
+        amount,
+        icon:category?.icon||recurrence.kind,
+        color:recurrence.kind==="income"?"green":recurrence.kind==="transfer"?"blue":"orange",
+        kind:recurrence.kind,
+        planned:true,
+        automaticAccounting:recurrence.automaticAccounting,
+        recurrencePlaceholder:true,
+      } satisfies Transaction;
+    })
     .sort((a,b)=>(a.dueDate||a.dateISO||"").localeCompare(b.dueDate||b.dateISO||""));
   const futurePlanned = recurrences
     .filter(item=>item.active&&!item.isSubscription&&item.nextDate>today)
@@ -1090,6 +1148,7 @@ export default function Home() {
   const [cards, setCards] = useState<MoneyCard[]>([]);
   const [budgets, setBudgets] = useState<MoneyBudget[]>([]);
   const [recurrences, setRecurrences] = useState<MoneyRecurrence[]>([]);
+  const confirmingRecurrences = useRef(new Set<string>());
   const [dataBusy, setDataBusy] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -1341,17 +1400,64 @@ export default function Home() {
   };
   const confirmPlannedTransaction = async (transaction: Transaction) => {
     const supabase=getSupabaseBrowserClient();
-    let automaticAccounting=false;
-    if(transaction.recurrenceId){
-      const {data}=await supabase.from("recurrences").select("automatic_accounting").eq("id",transaction.recurrenceId).maybeSingle();
-      automaticAccounting=Boolean(data?.automatic_accounting);
+    const recurrence=recurrences.find(item=>item.id===transaction.recurrenceId);
+    if(!user||!recurrence||!transaction.accountId) return;
+    const confirmationKey=`${recurrence.id}:${recurrence.nextDate}`;
+    if(confirmingRecurrences.current.has(confirmationKey)) return;
+    confirmingRecurrences.current.add(confirmationKey);
+    setDataError("");
+    try {
+      const {data:existing,error:lookupError}=await supabase.from("transactions")
+        .select("id")
+        .eq("recurrence_id",recurrence.id)
+        .eq("due_date",recurrence.nextDate)
+        .is("confirmed_at",null)
+        .order("created_at",{ascending:true})
+        .limit(1)
+        .maybeSingle();
+      if(lookupError) throw lookupError;
+      let transactionId=existing?.id ?? (transaction.recurrencePlaceholder ? null : transaction.id);
+      if(!transactionId){
+        const {data:created,error:insertError}=await supabase.from("transactions").insert({
+          user_id:user.id,
+          kind:recurrence.kind,
+          account_id:recurrence.accountId,
+          destination_account_id:recurrence.kind==="transfer"?recurrence.destinationAccountId:null,
+          card_id:recurrence.cardId,
+          category_id:recurrence.kind==="transfer"?null:recurrence.categoryId,
+          recurrence_id:recurrence.id,
+          transfer_group_id:recurrence.kind==="transfer"?crypto.randomUUID():null,
+          amount:Math.abs(recurrence.amount),
+          transaction_date:recurrence.nextDate,
+          due_date:recurrence.nextDate,
+          confirmed_at:null,
+          accounted_at:null,
+          notes:recurrence.notes?.trim()||null,
+        }).select("id").single();
+        if(insertError) throw insertError;
+        transactionId=created.id;
+      }
+      const now=new Date().toISOString();
+      const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: now };
+      if(recurrence.automaticAccounting) updates.accounted_at = now;
+      const {error:confirmError}=await supabase.from("transactions").update(updates).eq("id",transactionId).is("confirmed_at",null);
+      if(confirmError) throw confirmError;
+      const occurrenceCount=recurrence.occurrenceCount+1;
+      const nextDate=nextRecurrenceDate(recurrence);
+      const completedByLimit=recurrence.occurrenceLimit!==null&&occurrenceCount>=recurrence.occurrenceLimit;
+      const completedByEndDate=Boolean(recurrence.endDate&&nextDate>recurrence.endDate);
+      const {error:recurrenceError}=await supabase.from("recurrences").update({
+        occurrence_count:occurrenceCount,
+        next_date:nextDate,
+        active:!(completedByLimit||completedByEndDate),
+      }).eq("id",recurrence.id).eq("next_date",recurrence.nextDate);
+      if(recurrenceError) throw recurrenceError;
+      await refreshData(user);
+    } catch(error) {
+      setDataError(error instanceof Error?error.message:"Impossibile confermare la transazione pianificata.");
+    } finally {
+      confirmingRecurrences.current.delete(confirmationKey);
     }
-    const now=new Date().toISOString();
-    const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: now };
-    if(automaticAccounting) updates.accounted_at = now;
-    const {error}=await supabase.from("transactions").update(updates).eq("id",transaction.id);
-    if(error){setDataError(error.message);return;}
-    await refreshData();
   };
   const skipPlannedTransaction = async (transaction: Transaction) => {
     if(!transaction.dueDate) return;
