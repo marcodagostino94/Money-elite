@@ -1,5 +1,19 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.4
+
+- Implementato il sistema multivaluta reale concordato.
+- Valuta principale configurabile nelle Impostazioni.
+- Ogni conto estero richiede un tasso fisso rispetto alla valuta principale.
+- Entrate, uscite, pianificate, abbonamenti e modelli mostrano la valuta del conto selezionato.
+- Patrimonio, Dashboard e Bilancio convertono i valori usando il tasso fisso dei conti.
+- I trasferimenti tra valute mostrano importo inviato e importo ricevuto.
+- L’importo ricevuto viene proposto automaticamente usando i tassi dei due conti e può essere modificato.
+- Modificando l’importo ricevuto viene ricalcolato il cambio effettivo del singolo trasferimento.
+- Importo ricevuto e cambio effettivo vengono salvati nello storico senza modificare il tasso generale dei conti.
+- Saldi e transazioni storiche preesistenti restano invariati.
+- Aggiunta la migrazione Supabase completa e non distruttiva.
+
 ## Aggiornamento v4.3
 
 - I conti archiviati sono chiusi per impostazione predefinita e si espandono tramite freccia.

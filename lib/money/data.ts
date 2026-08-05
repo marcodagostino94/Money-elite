@@ -14,6 +14,7 @@ export type MoneyAccount = {
   color: string;
   notes: string;
   currency: string;
+  exchangeRate: number;
 };
 
 export type MoneyCategory = {
@@ -41,6 +42,8 @@ export type MoneyTransaction = {
   confirmedAt: string | null;
   accountedAt: string | null;
   notes: string;
+  destinationAmount: number | null;
+  exchangeRate: number | null;
 };
 
 export type MoneyCard = {
@@ -262,15 +265,16 @@ async function loadAllTransactions(supabase: SupabaseClient, userId: string) {
 
 export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
   await ensureInitialData(supabase, userId);
-  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, rawTransactions, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }] = await Promise.all([
+  const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, rawTransactions, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }, {data:profile,error:profileError}] = await Promise.all([
     supabase.from("accounts").select("*").order("name"),
     supabase.from("categories").select("*").order("name"),
     loadAllTransactions(supabase, userId),
     supabase.from("cards").select("*").order("name"),
     supabase.from("budgets").select("*").order("month", { ascending: false }),
     supabase.from("recurrences").select("*").order("next_date"),
+    supabase.from("profiles").select("currency").eq("id",userId).single(),
   ]);
-  const error = accountsError ?? categoriesError ?? cardsError ?? budgetsError ?? recurrencesError;
+  const error = accountsError ?? categoriesError ?? cardsError ?? budgetsError ?? recurrencesError ?? profileError;
   if (error) throw error;
 
   const transactions: MoneyTransaction[] = (rawTransactions ?? []).map(row => ({
@@ -289,6 +293,8 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     confirmedAt: row.confirmed_at,
     accountedAt: row.accounted_at,
     notes: row.notes ?? "",
+    destinationAmount: row.destination_amount == null ? null : Number(row.destination_amount),
+    exchangeRate: row.exchange_rate == null ? null : Number(row.exchange_rate),
   }));
 
   // A planned transaction is only a forecast until the user confirms it.
@@ -300,7 +306,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     const delta = relevant.reduce((sum, transaction) => {
       if (transaction.kind === "transfer") {
         if (transaction.accountId === row.id) return sum - transaction.amount;
-        if (transaction.destinationAccountId === row.id) return sum + transaction.amount;
+        if (transaction.destinationAccountId === row.id) return sum + (transaction.destinationAmount ?? transaction.amount);
       }
       if (transaction.accountId !== row.id) return sum;
       return sum + (transaction.kind === "expense" || transaction.kind === "card_repayment" ? -transaction.amount : transaction.amount);
@@ -322,6 +328,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       color: row.color || "#7051bf",
       notes: row.notes ?? "",
       currency: row.currency || "EUR",
+      exchangeRate: Number(row.exchange_rate || 1),
     };
   });
 
@@ -352,7 +359,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     occurrenceCount: Number(row.occurrence_count ?? 0), endDate: row.end_date ?? null,
     automaticAccounting: Boolean(row.automatic_accounting), isSubscription: Boolean(row.is_subscription), active: Boolean(row.active), notes: row.notes ?? "",
   }));
-  return { accounts, categories, transactions, cards, budgets, recurrences };
+  return { accounts, categories, transactions, cards, budgets, recurrences, primaryCurrency: profile?.currency || "EUR" };
 }
 
 export const toIsoDate = (date: Date) => {
