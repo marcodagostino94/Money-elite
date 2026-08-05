@@ -30,6 +30,7 @@ type Transaction = {
   amount: number;
   icon: string;
   color: string;
+  categoryColor?: string;
   accounted?: boolean;
   isRefund?: boolean;
   refundOf?: string;
@@ -201,6 +202,7 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     amount: signedAmount,
     icon: category ? categoryVisual(category).icon : (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
     color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" ? "blue" : "orange",
+    categoryColor: category?.color || (row.kind === "transfer" ? "#729ac5" : row.kind === "income" || row.kind === "refund" ? "#559476" : "#c9716c"),
     accounted: Boolean(row.accountedAt),
     isRefund: row.kind === "refund",
     refundOf: row.refundOfId ?? undefined,
@@ -609,9 +611,10 @@ function TransactionRow({ t, onOpen }: { t: Transaction; onOpen?: (t: Transactio
     : `${t.account}${t.notes?.trim() ? ` • ${t.notes.trim()}` : ""}`;
   return (
     <button type="button" className={`transaction-row ${onOpen?"clickable":""}`} onClick={()=>onOpen?.(t)}>
-      <div className={`transaction-icon ${t.color}`}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Non contabilizzata"><AppIcon name="check" size={9}/></i>}</div>
+      <div className={`transaction-icon ${t.color}`} style={{color:t.categoryColor||undefined,background:t.categoryColor?`${t.categoryColor}18`:undefined}}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Non contabilizzata"><AppIcon name="check" size={9}/></i>}</div>
       <div className="transaction-info"><b>{title}</b><span>{subtitle}</span></div>
       <div className="transaction-amount"><b className={t.amount > 0 ? "positive" : ""}>{t.amount > 0 ? "+" : ""}{money(t.amount)}</b><span>{t.date}</span></div>
+      <i className={`transaction-direction-line ${t.kind==="transfer"?"transfer":t.amount>=0?"income":"expense"}`} aria-hidden="true"/>
     </button>
   );
 }
@@ -844,7 +847,10 @@ function BalanceMonthDetail({ detail }: { detail: "income" | "expense" }) {
 function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,onDuplicate}:{recurrences:MoneyRecurrence[];accounts:MoneyAccount[];cards:MoneyCard[];categories:MoneyCategory[];refresh:()=>Promise<void>;onEdit:(recurrence:MoneyRecurrence)=>void;onDuplicate:(recurrence:MoneyRecurrence)=>void}) {
   const [selected,setSelected]=useState<MoneyRecurrence|null>(null);
   const [working,setWorking]=useState(false);
-  const items=recurrences.filter(item=>!item.isSubscription).sort((a,b)=>a.nextDate.localeCompare(b.nextDate));
+  const [showPaused,setShowPaused]=useState(false);
+  const plannedRecurrences=recurrences.filter(item=>!item.isSubscription);
+  const pausedCount=plannedRecurrences.filter(item=>!item.active).length;
+  const items=plannedRecurrences.filter(item=>item.active||showPaused).sort((a,b)=>a.nextDate.localeCompare(b.nextDate));
   const currentMonth=monthKeyFromDate(new Date());
   const signed=(item:MoneyRecurrence)=>item.kind==="expense"?-item.amount:item.amount;
   const monthTotal=items.filter(item=>item.active&&item.nextDate.startsWith(currentMonth)).reduce((sum,item)=>sum+signed(item),0);
@@ -855,7 +861,7 @@ function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,on
   const skip=(item:MoneyRecurrence)=>run(async()=>{const nextDate=nextRecurrenceDate(item);if(!window.confirm(`Saltare la ripetizione del ${formatItalianDate(item.nextDate)}? La nuova scadenza sarà ${formatItalianDate(nextDate)}.`))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({next_date:nextDate}).eq("id",item.id).eq("next_date",item.nextDate);if(error)throw error;});
   const togglePause=(item:MoneyRecurrence)=>run(async()=>{const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:!item.active}).eq("id",item.id);if(error)throw error;});
   const remove=(item:MoneyRecurrence)=>run(async()=>{if(!window.confirm("Eliminare definitivamente questa transazione pianificata?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").delete().eq("id",item.id);if(error)throw error;});
-  return <section className="section-page"><article className="panel schedule-list">{items.length?items.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const amount=signed(item);return <button className={`schedule-row planned-recurrence-row ${item.active?"":"paused"}`} key={item.id} onClick={()=>setSelected(item)}><div className="schedule-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={item.kind==="transfer"?"transfer":category?.icon||item.kind}/></div><div className="planned-main"><b>{labelFor(item)}</b><span>{accountFor(item)} · {item.active?(item.frequency==="monthly"?"Mensile":item.frequency):"In pausa"}</span></div><div><strong className={amount>0?"positive":""}>{amount>0?"+":""}{money(amount)}</strong><span>{formatItalianDate(item.nextDate)}</span></div><AppIcon name="more" size={18}/><i className={item.kind==="transfer"?"transfer-line":amount>0?"income-line":"expense-line"}/></button>}):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div>{selected&&<div className="modal-backdrop planned-menu-backdrop" onMouseDown={()=>!working&&setSelected(null)}><div className="planned-action-menu" onMouseDown={event=>event.stopPropagation()}><div><small>TRANSAZIONE PIANIFICATA</small><h3>{labelFor(selected)}</h3><button onClick={()=>setSelected(null)} aria-label="Chiudi"><AppIcon name="close"/></button></div><button disabled={working||!selected.active} onClick={()=>void repeatNow(selected)}><AppIcon name="repeat"/> Ripeti ora</button><button disabled={working||!selected.active} onClick={()=>void skip(selected)}><AppIcon name="planned"/> Salta questa ripetizione</button><button disabled={working} onClick={()=>{setSelected(null);onEdit(selected)}}><AppIcon name="edit"/> Modifica</button><button disabled={working} onClick={()=>{setSelected(null);onDuplicate(selected)}}><AppIcon name="copy"/> Duplica</button><button disabled={working} onClick={()=>void togglePause(selected)}><AppIcon name={selected.active?"pause":"play"}/> {selected.active?"Metti in pausa":"Riattiva"}</button><button className="danger" disabled={working} onClick={()=>void remove(selected)}><AppIcon name="trash"/> Elimina</button></div></div>}</section>
+  return <section className="section-page">{pausedCount>0&&<div className="paused-recurrences-toggle"><button className={showPaused?"active":""} onClick={()=>setShowPaused(value=>!value)}><AppIcon name={showPaused?"eyeOff":"eye"} size={17}/>{showPaused?"Nascondi in pausa":`Mostra in pausa (${pausedCount})`}</button></div>}<article className="panel schedule-list">{items.length?items.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const amount=signed(item);return <button className={`schedule-row planned-recurrence-row ${item.active?"":"paused"}`} key={item.id} onClick={()=>setSelected(item)}><div className="schedule-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={item.kind==="transfer"?"transfer":category?.icon||item.kind}/></div><div className="planned-main"><b>{labelFor(item)}</b><span>{accountFor(item)} · {item.active?(item.frequency==="monthly"?"Mensile":item.frequency):"In pausa"}</span></div><div><strong className={amount>0?"positive":""}>{amount>0?"+":""}{money(amount)}</strong><span>{formatItalianDate(item.nextDate)}</span></div><AppIcon name="more" size={18}/><i className={item.kind==="transfer"?"transfer-line":amount>0?"income-line":"expense-line"}/></button>}):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div>{selected&&<div className="modal-backdrop planned-menu-backdrop" onMouseDown={()=>!working&&setSelected(null)}><div className="planned-action-menu" onMouseDown={event=>event.stopPropagation()}><div><small>TRANSAZIONE PIANIFICATA</small><h3>{labelFor(selected)}</h3><button onClick={()=>setSelected(null)} aria-label="Chiudi"><AppIcon name="close"/></button></div><button disabled={working||!selected.active} onClick={()=>void repeatNow(selected)}><AppIcon name="repeat"/> Ripeti ora</button><button disabled={working||!selected.active} onClick={()=>void skip(selected)}><AppIcon name="planned"/> Salta questa ripetizione</button><button disabled={working} onClick={()=>{setSelected(null);onEdit(selected)}}><AppIcon name="edit"/> Modifica</button><button disabled={working} onClick={()=>{setSelected(null);onDuplicate(selected)}}><AppIcon name="copy"/> Duplica</button><button disabled={working} onClick={()=>void togglePause(selected)}><AppIcon name={selected.active?"pause":"play"}/> {selected.active?"Metti in pausa":"Riattiva"}</button><button className="danger" disabled={working} onClick={()=>void remove(selected)}><AppIcon name="trash"/> Elimina</button></div></div>}</section>
 }
 
 function SubscriptionsSection({ recurrences, categories, refresh, onEdit }: { recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; refresh: () => Promise<void>; onEdit: (recurrence: MoneyRecurrence) => void }) {
