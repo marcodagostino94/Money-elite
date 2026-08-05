@@ -146,6 +146,27 @@ input,textarea,select{font-size:16px}
 }
 @media(max-width:700px){.interactive-category-balance{grid-template-columns:1fr}.interactive-donut-card{min-height:310px}.interactive-donut{max-width:330px}.interactive-legend{padding:7px}.interactive-legend button{grid-template-columns:18px minmax(0,1fr) 34px auto;gap:7px}.interactive-legend b{font-size:12px}.interactive-legend strong{font-size:12px}.balance-drill-heading h3{font-size:17px}}
 
+/* v4.5.1 — rifiniture di allineamento e densità */
+.balance-drill-heading>button,.donut-actions button{display:grid!important;place-items:center!important;padding:0!important;line-height:0!important}
+.balance-drill-heading>button svg,.donut-actions button svg{display:block;margin:auto}
+.amount-input>span{left:14px!important;top:50%!important;transform:translateY(-50%);width:62px;white-space:nowrap;font-family:var(--font-ui)!important;font-size:19px!important;line-height:1;font-weight:760!important;z-index:1}
+.amount-input>input{padding-left:88px!important;min-width:0}
+.dashboard-wealth-card h2{display:inline-block;vertical-align:middle}
+.dashboard-wealth-card .foreign-holdings{display:inline-flex;vertical-align:middle;margin:8px 0 8px 18px;gap:8px}
+.dashboard-wealth-card .foreign-holdings span{font-size:15px;font-weight:700;padding:7px 12px;color:#eee8fa;background:#ffffff18;border-color:#ffffff2b}
+@media(min-width:901px){
+  .pending-confirmations{margin-bottom:10px!important}
+  .pending-heading{padding:10px 15px!important;min-height:58px!important}
+  .pending-heading h3{font-size:15px!important;line-height:1.15!important;margin-bottom:2px!important}
+  .pending-heading p{font-size:10px!important}.pending-badge{font-size:10px!important}
+  .pending-item{grid-template-columns:36px minmax(0,1fr) auto auto!important;gap:9px!important;padding:10px 15px!important;min-height:61px!important}
+  .pending-date{width:34px!important;height:38px!important}.pending-date b{font-size:13px!important}.pending-date span{font-size:8px!important}
+  .pending-item>div:nth-child(2) b{font-size:14px!important}.pending-item>div:nth-child(2) span{font-size:11px!important}
+  .pending-item>strong{font-size:15px!important}.pending-item>button{min-height:34px!important;padding:6px 10px!important;font-size:11px!important}
+  .dashboard-overview-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+}
+@media(max-width:620px){.amount-input>span{width:55px;font-size:16px!important}.amount-input>input{padding-left:76px!important}.dashboard-wealth-card .foreign-holdings{display:flex;margin:5px 0 9px}.dashboard-wealth-card .foreign-holdings span{font-size:13px;padding:6px 10px}}
+
 /* Il grafico resta sempre sopra il pulsante mobile e non viene tagliato su iPhone. */
 @media(max-width:620px){
   .insight-panel{position:relative;z-index:2;margin-bottom:78px}

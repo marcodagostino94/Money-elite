@@ -1,5 +1,19 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.5.2
+
+- Ogni cambio di sezione riporta automaticamente la visualizzazione all’inizio della pagina.
+- Il comportamento è uniforme su Mac, iPhone e browser.
+- Nessuna nuova migrazione Supabase richiesta.
+
+## Aggiornamento v4.5.1
+
+- Centrati i pulsanti freccia, lente ed elenco del Bilancio interattivo.
+- Ridotte ulteriormente altezza e tipografia della card Da confermare su desktop.
+- Riservato uno spazio fisso alla sigla della valuta nei campi importo, evitando sovrapposizioni con 0,00.
+- Spostato il riepilogo delle valute estere accanto al patrimonio e aumentata la sua leggibilità.
+- Nessuna nuova migrazione Supabase richiesta rispetto alla v4.5.
+
 ## Aggiornamento v4.5
 
 - Compattata la Dashboard desktop riducendo spazi, altezze e margini inutilizzati.
