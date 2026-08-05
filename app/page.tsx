@@ -91,6 +91,7 @@ const DASHBOARD_PREFERENCES_KEY = "money-elite-dashboard-preferences-v1";
 const ACCOUNT_ORDER_KEY = "money-elite-account-order-v1";
 const TRANSACTION_TEMPLATES_KEY = "money-elite-transaction-templates-v1";
 const PRIMARY_CURRENCY_KEY="money-elite-primary-currency-v1";
+const BUDGET_NOTIFICATIONS_KEY="money-elite-budget-notifications-v1";
 const ISO_CURRENCIES=["EUR","USD","GBP","EGP","CHF","JPY","CAD","AUD","AED","ALL","ARS","BRL","CNY","CZK","DKK","HKD","HUF","INR","ISK","MAD","MXN","NOK","NZD","PLN","RON","SEK","SGD","THB","TRY","ZAR"];
 
 const loadTransactionTemplates = (): TransactionTemplate[] => {
@@ -102,6 +103,31 @@ const loadTransactionTemplates = (): TransactionTemplate[] => {
 };
 const saveTransactionTemplates = (templates: TransactionTemplate[]) => {
   window.localStorage.setItem(TRANSACTION_TEMPLATES_KEY, JSON.stringify(templates));
+  window.dispatchEvent(new Event("money-elite-templates-changed"));
+  void (async()=>{
+    const supabase=getSupabaseBrowserClient();
+    const {data:{user}}=await supabase.auth.getUser();
+    if(!user)return;
+    if(templates.length){
+      const {error}=await supabase.from("transaction_templates").upsert(templates.map(template=>({id:template.id,user_id:user.id,name:template.name,kind:template.kind,amount:template.amount,category:template.category,account:template.account,notes:template.notes})),{onConflict:"id"});
+      if(error){console.warn("Sincronizzazione modelli non disponibile",error.message);return;}
+    }
+    const {data:remote}=await supabase.from("transaction_templates").select("id").eq("user_id",user.id);
+    const removed=(remote||[]).map(row=>row.id).filter(id=>!templates.some(template=>template.id===id));
+    if(removed.length)await supabase.from("transaction_templates").delete().in("id",removed).eq("user_id",user.id);
+  })();
+};
+
+const syncTransactionTemplates=async()=>{
+  const supabase=getSupabaseBrowserClient();
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return;
+  const local=loadTransactionTemplates();
+  let {data,error}=await supabase.from("transaction_templates").select("*").eq("user_id",user.id).order("updated_at",{ascending:false});
+  if(error)return;
+  if(!data?.length&&local.length){await supabase.from("transaction_templates").upsert(local.map(template=>({id:template.id,user_id:user.id,name:template.name,kind:template.kind,amount:template.amount,category:template.category,account:template.account,notes:template.notes})),{onConflict:"id"});const refreshed=await supabase.from("transaction_templates").select("*").eq("user_id",user.id).order("updated_at",{ascending:false});data=refreshed.data;error=refreshed.error;if(error)return;}
+  const templates:TransactionTemplate[]=(data||[]).map(row=>({id:row.id,name:row.name,kind:row.kind,amount:Number(row.amount),category:row.category,account:row.account,notes:row.notes||""}));
+  window.localStorage.setItem(TRANSACTION_TEMPLATES_KEY,JSON.stringify(templates));
   window.dispatchEvent(new Event("money-elite-templates-changed"));
 };
 
@@ -753,7 +779,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
     ],
   };
   if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
-  if (section === "Report") return <ReportSection />;
+  if (section === "Report") return <ReportSection transactions={transactions} accounts={accounts} categories={categories} recurrences={recurrences} primaryCurrency={primaryCurrency}/>;
   if (section === "Informazioni") return <InformationSection />;
   if (section === "Impostazioni") return <SettingsSection accounts={accounts} categories={categories} primaryCurrency={primaryCurrency} onChangePrimaryCurrency={onChangePrimaryCurrency} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} transactions={transactions} accounts={accounts} primaryCurrency={primaryCurrency} openTransaction={openTransaction} />;
@@ -1062,20 +1088,24 @@ function BudgetModal({ categories, month, close, refresh }: { categories: MoneyC
   return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>NUOVO BUDGET</small><h2>Crea budget</h2></div></div><label>Categoria<select name="category" required>{leaves.map(c=>{const parent=c.parentId?categories.find(p=>p.id===c.parentId):null;return <option key={c.id} value={c.id}>{parent?`${parent.name} › `:""}{c.name}</option>})}</select></label><label>Ammontare<input name="amount" type="text" inputMode="decimal" placeholder="0,00" required/></label><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer">Salva</button></div></form></div>;
 }
 
-function ReportSection() {
-  return (
-    <section className="section-page">
-      <div className="section-toolbar"><button className="outline">↓ Esporta report</button></div>
-      <div className="report-grid">
-        <article className="panel report-chart"><div className="panel-title"><div><h3>Entrate e uscite</h3><p>Ultimi 6 mesi</p></div></div><div className="bars">{[42,58,48,72,55,82].map((h,i)=><div key={i}><i style={{height:`${h}%`}}/><i style={{height:`${h*.55}%`}}/><span>{["Feb","Mar","Apr","Mag","Giu","Lug"][i]}</span></div>)}</div></article>
-        <article className="panel category-report"><h3>Uscite per categoria</h3><div className="donut"><div><strong>€ 1.486</strong><span>Totale uscite</span></div></div>{["Casa 31%","Alimentari 24%","Tempo libero 18%","Altro 27%"].map((x,i)=><p key={x}><i className={`c${i}`}/>{x}</p>)}</article>
-      </div>
-    </section>
-  );
+function ReportSection({transactions,accounts,categories,recurrences,primaryCurrency}:{transactions:Transaction[];accounts:MoneyAccount[];categories:MoneyCategory[];recurrences:MoneyRecurrence[];primaryCurrency:string}) {
+  const [view,setView]=useState<"overview"|"future">("overview");
+  const converted=(amount:number,accountId?:string)=>Math.abs(amount)/Math.max(accounts.find(account=>account.id===accountId)?.exchangeRate||1,.00000001);
+  const effective=transactions.filter(isEffectiveTransaction);
+  const monthKeys=Array.from({length:6},(_,index)=>{const date=new Date();date.setDate(1);date.setMonth(date.getMonth()-5+index);return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`});
+  const monthly=monthKeys.map(key=>{const rows=effective.filter(item=>item.dateISO?.startsWith(key));return {key,label:monthLabel(key).split(" ")[0].slice(0,3),income:rows.filter(item=>item.kind==="income"||item.kind==="refund").reduce((sum,item)=>sum+converted(item.amount,item.accountId),0),expense:rows.filter(item=>item.kind==="expense").reduce((sum,item)=>sum+converted(item.amount,item.accountId),0)}});
+  const maximum=Math.max(1,...monthly.flatMap(item=>[item.income,item.expense]));
+  const currentMonth=monthKeys.at(-1)!;const currentExpenses=effective.filter(item=>item.kind==="expense"&&item.dateISO?.startsWith(currentMonth));
+  const categoryTotals=Array.from(currentExpenses.reduce((map,item)=>{const category=categories.find(value=>value.id===item.categoryId);const root=category?.parentId?categories.find(value=>value.id===category.parentId):category;const name=root?.name||"Senza categoria";map.set(name,(map.get(name)||0)+converted(item.amount,item.accountId));return map},new Map<string,number>()).entries()).sort((a,b)=>b[1]-a[1]);
+  const futureLimit=new Date();futureLimit.setMonth(futureLimit.getMonth()+12);const futureLimitIso=toIsoDate(futureLimit);const today=toIsoDate(new Date());
+  const futureRows=recurrences.filter(item=>item.active).flatMap(recurrence=>{const rows:{date:string;name:string;kind:string;amount:number;accountId:string|null}[]=[];let cursor=recurrence.nextDate;let count=recurrence.occurrenceCount;while(cursor<=futureLimitIso&&rows.length<370){if(cursor>=today)rows.push({date:cursor,name:categories.find(category=>category.id===recurrence.categoryId)?.name||recurrence.notes||"Pianificata",kind:recurrence.kind,amount:converted(recurrence.amount,recurrence.accountId||undefined),accountId:recurrence.accountId});count++;if(recurrence.occurrenceLimit!==null&&count>=recurrence.occurrenceLimit)break;const next=nextRecurrenceDate({...recurrence,nextDate:cursor});if(next===cursor||recurrence.endDate&&next>recurrence.endDate)break;cursor=next}return rows}).sort((a,b)=>a.date.localeCompare(b.date));
+  const futureMonths=Array.from({length:12},(_,index)=>{const date=new Date();date.setDate(1);date.setMonth(date.getMonth()+index);const key=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}`;const rows=futureRows.filter(item=>item.date.startsWith(key));const income=rows.filter(item=>item.kind==="income").reduce((sum,item)=>sum+item.amount,0);const expense=rows.filter(item=>item.kind==="expense").reduce((sum,item)=>sum+item.amount,0);return {key,label:monthLabel(key),income,expense,balance:income-expense}});
+  const exportReport=()=>{const content={generatedAt:new Date().toISOString(),currency:primaryCurrency,monthly,future:futureMonths,futureTransactions:futureRows};const blob=new Blob([JSON.stringify(content,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`Money_Elite_report_${toIsoDate(new Date())}.json`;link.click();URL.revokeObjectURL(url)};
+  return <section className="section-page report-real"><div className="section-toolbar"><div className="report-tabs"><button className={view==="overview"?"active":""} onClick={()=>setView("overview")}>Analisi</button><button className={view==="future"?"active":""} onClick={()=>setView("future")}>Futuro</button></div><button className="outline" onClick={exportReport}>↓ Esporta report</button></div>{view==="overview"?<div className="report-grid"><article className="panel report-chart"><div className="panel-title"><div><h3>Entrate e uscite</h3><p>Ultimi 6 mesi · {primaryCurrency}</p></div></div><div className="bars">{monthly.map(item=><div key={item.key}><i className="report-income" style={{height:`${item.income/maximum*100}%`}}/><i className="report-expense" style={{height:`${item.expense/maximum*100}%`}}/><span>{item.label}</span></div>)}</div><div className="report-legend"><span>● Entrate</span><span>● Uscite</span></div></article><article className="panel category-report"><h3>Uscite per categoria</h3><p className="report-period">{monthLabel(currentMonth)}</p><div className="report-category-list">{categoryTotals.map(([name,value])=><div key={name}><span>{name}</span><b>{accountMoney(value,primaryCurrency)}</b></div>)}{!categoryTotals.length&&<div className="empty">Nessuna uscita nel mese.</div>}</div></article></div>:<><article className="panel future-summary"><div><small>PREVISIONE 12 MESI</small><h3>{futureRows.length} movimenti pianificati</h3></div><div><span>Entrate previste</span><b className="positive">{accountMoney(futureMonths.reduce((sum,item)=>sum+item.income,0),primaryCurrency)}</b></div><div><span>Uscite previste</span><b>{accountMoney(-futureMonths.reduce((sum,item)=>sum+item.expense,0),primaryCurrency)}</b></div></article><article className="panel future-table"><div className="future-row future-head"><b>Mese</b><b>Entrate</b><b>Uscite</b><b>Saldo</b></div>{futureMonths.map(item=><div className="future-row" key={item.key}><b>{item.label}</b><span className="positive">{accountMoney(item.income,primaryCurrency)}</span><span>{accountMoney(-item.expense,primaryCurrency)}</span><strong className={item.balance>=0?"positive":""}>{accountMoney(item.balance,primaryCurrency)}</strong></div>)}</article></>}</section>;
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.7.3</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Interfaccia più reattiva, nuovo indicatore da contabilizzare e categoria automatica degli interessi maturati.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.8</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Avvisi budget, modelli sincronizzati, backup completo e report futuri basati sulle pianificate.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1157,6 +1187,19 @@ function TemplateManagementVisual({accounts,categories}:{accounts:MoneyAccount[]
 }
 
 function SettingsSection({ accounts, categories, primaryCurrency, onChangePrimaryCurrency, dashboardAccountIds, onChangeDashboardAccounts }: { accounts: MoneyAccount[]; categories: MoneyCategory[]; primaryCurrency:string; onChangePrimaryCurrency:(currency:string)=>Promise<void>; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids: string[]) => void }) {
+  const [exporting,setExporting]=useState(false);
+  const [budgetNotifications,setBudgetNotifications]=useState(()=>typeof window==="undefined"||window.localStorage.getItem(BUDGET_NOTIFICATIONS_KEY)!=="false");
+  const exportAllData=async()=>{
+    setExporting(true);
+    try{
+      const supabase=getSupabaseBrowserClient();
+      const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Sessione non disponibile");
+      const tableNames=["profiles","accounts","cards","categories","recurrences","transactions","budgets","debts","transaction_templates"] as const;
+      const entries=await Promise.all(tableNames.map(async table=>{const {data,error}=await supabase.from(table).select("*").eq(table==="profiles"?"id":"user_id",user.id);if(error)throw error;return [table,data||[]] as const}));
+      const backup={application:"Money Elite",version:"4.8",exportedAt:new Date().toISOString(),userId:user.id,data:Object.fromEntries(entries),localPreferences:{dashboard:window.localStorage.getItem(DASHBOARD_PREFERENCES_KEY),accountOrder:window.localStorage.getItem(ACCOUNT_ORDER_KEY),primaryCurrency:window.localStorage.getItem(PRIMARY_CURRENCY_KEY),budgetNotifications:window.localStorage.getItem(BUDGET_NOTIFICATIONS_KEY)}};
+      const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download=`Money_Elite_backup_${toIsoDate(new Date())}.json`;link.click();URL.revokeObjectURL(url);
+    }catch(error){alert(error instanceof Error?error.message:"Impossibile esportare il backup.")}finally{setExporting(false)}
+  };
   const selectableAccounts = accounts.filter(account=>!account.archived&&!account.hidden&&!account.isContainer);
   const toggleDashboardAccount = (accountId:string) => {
     const next = dashboardAccountIds.includes(accountId)
@@ -1172,7 +1215,7 @@ function SettingsSection({ accounts, categories, primaryCurrency, onChangePrimar
         <label>Nome profilo<input defaultValue="Marco" /></label>
         <label>Valuta principale<select value={primaryCurrency} onChange={event=>void onChangePrimaryCurrency(event.target.value)}>{ISO_CURRENCIES.map(value=><option key={value}>{value}</option>)}</select><small>Usata per patrimonio, Dashboard, grafici, budget e statistiche.</small></label>
         <label>Inizio del mese<select><option>Giorno 1</option><option>Giorno 27</option></select></label>
-        <div className="toggle-row"><div><b>Notifiche budget</b><span>Avvisami quando raggiungo l’80%</span></div><input type="checkbox" defaultChecked /></div>
+        <div className="toggle-row"><div><b>Notifiche budget</b><span>Avvisami quando raggiungo o supero il limite</span></div><input type="checkbox" checked={budgetNotifications} onChange={event=>{const enabled=event.target.checked;setBudgetNotifications(enabled);window.localStorage.setItem(BUDGET_NOTIFICATIONS_KEY,String(enabled));if(enabled&&"Notification" in window&&Notification.permission==="default")void Notification.requestPermission()}} /></div>
       </article>
 
       <article className="panel settings-card dashboard-preferences">
@@ -1189,7 +1232,7 @@ function SettingsSection({ accounts, categories, primaryCurrency, onChangePrimar
 
       <TemplateManagementVisual accounts={accounts} categories={categories}/>
       <CategoryManagement />
-      <article className="panel settings-card"><h3>Dati e sicurezza</h3><p className="setting-note">La struttura è predisposta per Supabase. Configura le variabili del progetto per attivare sincronizzazione, backup e accesso protetto.</p><button className="outline">Esporta tutti i dati</button></article>
+      <article className="panel settings-card"><h3>Dati e sicurezza</h3><p className="setting-note">Scarica un backup JSON completo di profilo, conti, transazioni, pianificate, categorie, budget, carte e modelli.</p><button className="outline" disabled={exporting} onClick={()=>void exportAllData()}>{exporting?"Preparazione backup…":"↓ Esporta tutti i dati"}</button></article>
     </section>
   );
 }
@@ -1393,6 +1436,7 @@ export default function Home() {
   const [dataBusy, setDataBusy] = useState(true);
   const [dataError, setDataError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  useEffect(()=>{if(user)void syncTransactionTemplates()},[user?.id]);
   useEffect(()=>{
     const frame=window.requestAnimationFrame(()=>{
       window.scrollTo({top:0,left:0,behavior:"instant"});
@@ -1471,6 +1515,23 @@ export default function Home() {
     if (!account) {
       setDataError("Seleziona un conto valido prima di salvare.");
       return;
+    }
+    if(transaction.amount<0&&!transaction.planned&&category){
+      const month=(transaction.dateISO??toIsoDate(new Date())).slice(0,7);
+      const budget=budgets.find(item=>item.categoryId===category.id&&item.month.startsWith(month));
+      if(budget){
+        const alreadySpent=transactions.filter(item=>item.id!==transaction.id&&isEffectiveTransaction(item)&&item.categoryId===category.id&&item.kind==="expense"&&item.dateISO?.startsWith(month)).reduce((sum,item)=>sum+Math.abs(item.amount),0);
+        const projected=alreadySpent+Math.abs(transaction.amount);
+        if(projected>=budget.amount){
+          const exceeded=projected>budget.amount;
+          const message=`Hai ${exceeded?"superato":"raggiunto"} il budget “${transaction.category}” (${accountMoney(projected,primaryCurrency)} su ${accountMoney(budget.amount,primaryCurrency)}). Continuare?`;
+          if(!window.confirm(message))return;
+          if(window.localStorage.getItem(BUDGET_NOTIFICATIONS_KEY)!=="false"&&"Notification" in window){
+            if(Notification.permission==="granted")new Notification("Budget raggiunto",{body:message.replace(" Continuare?","")});
+            else if(Notification.permission==="default")void Notification.requestPermission().then(permission=>{if(permission==="granted")new Notification("Budget raggiunto",{body:message.replace(" Continuare?","")})});
+          }
+        }
+      }
     }
     let recurrenceId: string | null = transaction.recurrenceId ?? null;
     if (modal?.recurrenceEditId) {
@@ -1637,6 +1698,7 @@ export default function Home() {
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
       .on("postgres_changes", { event: "*", schema: "public", table: "recurrences", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
       .on("postgres_changes", { event: "*", schema: "public", table: "budgets", filter: `user_id=eq.${user.id}` }, () => void refreshData(user))
+      .on("postgres_changes", { event: "*", schema: "public", table: "transaction_templates", filter: `user_id=eq.${user.id}` }, () => void syncTransactionTemplates())
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
