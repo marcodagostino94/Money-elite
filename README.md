@@ -25,4 +25,6 @@ Lo schema completo si trova in `supabase/schema.sql`. Le migrazioni aggiuntive s
 
 ## Versione
 
-Money Elite 4.2.0 — 5 agosto 2026.
+Money Elite 4.3.0 — 5 agosto 2026.
+
+Per aggiornare un database già esistente alla gestione multivaluta, eseguire nel SQL Editor di Supabase `supabase/migrations/20260805_account_currency.sql` una sola volta.

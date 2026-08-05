@@ -26,6 +26,7 @@ create table accounts (
   name text not null,
   type account_type not null default 'bank',
   opening_balance numeric(14,2) not null default 0,
+  currency text not null default 'EUR',
   voucher_unit_value numeric(10,2),
   hidden_from_totals boolean not null default false,
   archived_at timestamptz,

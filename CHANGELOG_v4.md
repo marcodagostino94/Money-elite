@@ -1,5 +1,16 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.3
+
+- I conti archiviati sono chiusi per impostazione predefinita e si espandono tramite freccia.
+- Aggiunta la scelta e la modifica dell’icona del conto.
+- Aggiunta una valuta per ogni conto: EUR, USD, GBP, CHF, JPY, CAD e AUD.
+- I saldi dei singoli conti vengono formattati nella relativa valuta; i totali generali in euro non sommano importi esteri senza conversione.
+- I modelli ora usano selettori visuali per categoria, sottocategoria e conto.
+- La stella dei modelli è stata spostata in alto a destra accanto al titolo Categoria.
+- Il selettore categorie si chiude toccando lo sfondo, ora oscurato come nel selettore dei conti.
+- Aggiunta la migrazione Supabase per la valuta dei conti.
+
 ## Aggiornamento v4.2
 
 - Aggiunta la gestione dei modelli di entrata e uscita nelle Impostazioni.

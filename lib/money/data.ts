@@ -13,6 +13,7 @@ export type MoneyAccount = {
   icon: string;
   color: string;
   notes: string;
+  currency: string;
 };
 
 export type MoneyCategory = {
@@ -320,6 +321,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       icon: row.icon || "bank",
       color: row.color || "#7051bf",
       notes: row.notes ?? "",
+      currency: row.currency || "EUR",
     };
   });
 
