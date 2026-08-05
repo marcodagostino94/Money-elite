@@ -161,6 +161,11 @@ const dateInMonth = (isoDate: string | undefined, monthKey: string) => Boolean(i
 // Planned transactions are forecasts until confirmation. Only effective transactions
 // may affect balances, budgets, card debt or financial summaries.
 const isEffectiveTransaction = (transaction: Transaction) => !transaction.dueDate || Boolean(transaction.confirmedAt);
+const netExpenses = (transactions: Transaction[]) => {
+  const expenses = transactions.filter(transaction=>transaction.kind==="expense").reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const refunds = transactions.filter(transaction=>transaction.kind==="refund"||transaction.isRefund).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  return Math.max(0,expenses-refunds);
+};
 const cardCycleBounds = (monthKey: string, cycleStartDay: number) => {
   const [year, month] = monthKey.split("-").map(Number);
   const start = new Date(year, month-1, Math.max(1,Math.min(31,cycleStartDay)), 12);
@@ -431,9 +436,8 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const currentMonth = today.slice(0,7);
   const effectiveTransactions = transactions.filter(isEffectiveTransaction);
   const monthTransactions = effectiveTransactions.filter(transaction=>transaction.dateISO?.startsWith(currentMonth));
-  const refunds = monthTransactions.filter(transaction=>transaction.isRefund).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
-  const income = monthTransactions.filter(transaction=>transaction.amount>0&&!transaction.isRefund&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0);
-  const expenses = Math.max(0,Math.abs(monthTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer").reduce((sum,transaction)=>sum+transaction.amount,0))-refunds);
+  const income = monthTransactions.filter(transaction=>transaction.kind==="income").reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const expenses = netExpenses(monthTransactions);
   const balance = income-expenses;
   const visibleAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
   const dashboardAccounts = dashboardAccountIds
@@ -445,9 +449,9 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,effectiveTransactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
   const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
-  const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const weekExpenses = netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today));
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
-  const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
+  const monthExpenses = netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today));
   const recurrenceDuePending = recurrences
     .filter(item=>item.active&&item.nextDate<=today)
     .map(recurrence=>{
@@ -650,7 +654,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
   if (section === "Report") return <ReportSection />;
   if (section === "Impostazioni") return <SettingsSection accounts={accounts} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
-  if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} />;
+  if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} transactions={transactions} openTransaction={openTransaction} />;
   if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence} onDuplicate={duplicateRecurrence}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
   if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} openTransaction={openTransaction}/>;
@@ -816,32 +820,38 @@ function RepayModal({ close }: { close: () => void }) {
   return <div className="modal-backdrop" onMouseDown={close}><form className="modal entity-modal" onMouseDown={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();close()}}><div className="modal-title"><div><small>PAGAMENTO CARTA</small><h2>Ripaga Carta Elite</h2></div><button type="button" onClick={close}>×</button></div><div className="repay-due"><span>Ammontare dovuto</span><strong>€ 1.146,30</strong><small>Periodo 21/07/26 — 20/08/26</small></div><label>Valore<input type="number" step=".01" placeholder="0,00"/></label><label>Tasso di interesse<input type="number" step=".01" placeholder="0,00%"/></label><label>Conto di pagamento<select><option>Conto principale</option><option>Contanti</option></select></label><label>Data<button type="button" className="date-wheel-trigger"><span>◫</span><b>29 Luglio 2026</b><i>›</i></button></label><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer">Salva pagamento</button></div></form></div>
 }
 
-function BalanceHistorySection({ onAdd }: { onAdd: (kind: ActionKind) => void }) {
+function BalanceHistorySection({ onAdd, transactions, openTransaction }: { onAdd: (kind: ActionKind) => void; transactions: Transaction[]; openTransaction: (transaction: Transaction) => void }) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [detail, setDetail] = useState<"transactions" | "income" | "expense" | "incomeTransactions" | "expenseTransactions" | null>(null);
-  const months = [
-    ["Luglio 2026",3250,1486.30],["Giugno 2026",2890,1764.40],["Maggio 2026",3040,2195.70],["Aprile 2026",2750,2924.30],["Marzo 2026",3100,2418.25],["Febbraio 2026",2680,2334.80],
-  ] as const;
+  const effective=transactions.filter(isEffectiveTransaction);
+  const currentMonth=monthKeyFromDate(new Date());
+  const monthKeys=Array.from(new Set([currentMonth,...effective.map(item=>item.dateISO?.slice(0,7)).filter((value):value is string=>Boolean(value))])).sort().reverse();
+  const months=monthKeys.map(key=>{const rows=effective.filter(item=>dateInMonth(item.dateISO,key));const income=rows.filter(item=>item.kind==="income").reduce((sum,item)=>sum+Math.abs(item.amount),0);const expense=netExpenses(rows);return {key,label:monthLabel(key),income,expense};});
+  const selectedRows=selectedMonth?effective.filter(item=>dateInMonth(item.dateISO,selectedMonth)):[];
   if (selectedMonth && detail) {
     const transactionPage = detail === "transactions" || detail === "incomeTransactions" || detail === "expenseTransactions";
-    return <section className="section-page balance-page"><div className="inner-page-header"><button onClick={()=>setDetail(null)}>←</button><div><small>BILANCIO</small><h2>{detail==="transactions"?"Transazioni":detail==="incomeTransactions"?"Entrate del mese":detail==="expenseTransactions"?"Uscite del mese":detail==="income"?"Entrate":"Uscite"}</h2><p>{selectedMonth}</p></div></div>{transactionPage?<BalanceTransactionPage filter={detail}/>:<><BalanceMonthDetail detail={detail}/><button className="view-month-transactions" onClick={()=>setDetail(detail==="income"?"incomeTransactions":"expenseTransactions")}>Vedi tutte le {detail==="income"?"entrate":"uscite"} del mese →</button></>}<QuickActions allowTransfer={false} openAction={onAdd}/></section>;
+    return <section className="section-page balance-page"><div className="inner-page-header"><button onClick={()=>setDetail(null)}>←</button><div><small>BILANCIO</small><h2>{detail==="transactions"?"Transazioni":detail==="incomeTransactions"?"Entrate del mese":detail==="expenseTransactions"?"Uscite del mese":detail==="income"?"Entrate":"Uscite"}</h2><p>{monthLabel(selectedMonth)}</p></div></div>{transactionPage?<BalanceTransactionPage filter={detail} transactions={selectedRows} openTransaction={openTransaction}/>:<><BalanceMonthDetail detail={detail} transactions={selectedRows}/><button className="view-month-transactions" onClick={()=>setDetail(detail==="income"?"incomeTransactions":"expenseTransactions")}>Vedi tutte le {detail==="income"?"entrate":"uscite"} del mese →</button></>}<QuickActions allowTransfer={false} openAction={onAdd}/></section>;
   }
   return <section className="section-page"><div className="section-toolbar"><button className="outline">↓ Esporta bilancio</button></div>
-    <div className="history-list">{months.map(([month,income,expense])=>{const total=income-expense;const share=Math.round(income/(income+expense)*100);return <button className="history-row" key={month} onClick={()=>setSelectedMonth(month)}><div className="mini-donut" style={{background:`conic-gradient(#559476 0 ${share}%,#c96360 ${share}% 100%)`}}/><div><h3>{month}</h3><span>Apri dettagli del mese →</span></div><div className="history-values"><span>Entrate <b className="positive">+ {money(income)}</b></span><span>Uscite <b>− {money(expense)}</b></span><strong className={total>=0?"positive":""}>Totale {total>=0?"+ ":"− "}{money(Math.abs(total))}</strong></div></button>})}</div>
-    {selectedMonth && <div className="modal-backdrop balance-overlay" onMouseDown={()=>setSelectedMonth(null)}><div className="balance-dialog" onMouseDown={e=>e.stopPropagation()}><div className="balance-dialog-title"><div><small>BILANCIO</small><h2>{selectedMonth}</h2></div><button onClick={()=>setSelectedMonth(null)}>×</button></div><p>Scegli cosa vuoi consultare</p><div className="balance-options"><button onClick={()=>setDetail("transactions")}><span>☷</span><div><b>Transazioni</b><small>Tutti i movimenti del mese</small></div><i>→</i></button><button onClick={()=>setDetail("income")}><span className="green-ring">◐</span><div><b>Entrate</b><small>Totale e categorie delle entrate</small></div><i>→</i></button><button onClick={()=>setDetail("expense")}><span className="red-ring">◐</span><div><b>Uscite</b><small>Totale e categorie delle uscite</small></div><i>→</i></button></div></div></div>}
+    <div className="history-list">{months.map(({key,label,income,expense})=>{const total=income-expense;const share=income+expense>0?Math.round(income/(income+expense)*100):50;return <button className="history-row" key={key} onClick={()=>setSelectedMonth(key)}><div className="mini-donut" style={{background:`conic-gradient(#559476 0 ${share}%,#c96360 ${share}% 100%)`}}/><div><h3>{label}</h3><span>Apri dettagli del mese →</span></div><div className="history-values"><span>Entrate <b className="positive">+ {money(income)}</b></span><span>Uscite <b>− {money(expense)}</b></span><strong className={total>=0?"positive":""}>Totale {total>=0?"+ ":"− "}{money(Math.abs(total))}</strong></div></button>})}</div>
+    {selectedMonth && <div className="modal-backdrop balance-overlay" onMouseDown={()=>setSelectedMonth(null)}><div className="balance-dialog" onMouseDown={e=>e.stopPropagation()}><div className="balance-dialog-title"><div><small>BILANCIO</small><h2>{monthLabel(selectedMonth)}</h2></div><button onClick={()=>setSelectedMonth(null)}>×</button></div><p>Scegli cosa vuoi consultare</p><div className="balance-options"><button onClick={()=>setDetail("transactions")}><span>☷</span><div><b>Transazioni</b><small>Tutti i movimenti del mese</small></div><i>→</i></button><button onClick={()=>setDetail("income")}><span className="green-ring">◐</span><div><b>Entrate</b><small>Totale e categorie delle entrate</small></div><i>→</i></button><button onClick={()=>setDetail("expense")}><span className="red-ring">◐</span><div><b>Uscite</b><small>Totale netto e categorie delle uscite</small></div><i>→</i></button></div></div></div>}
   </section>
 }
 
-function BalanceTransactionPage({ filter }: { filter: "transactions" | "incomeTransactions" | "expenseTransactions" }) {
-  const rows = filter === "incomeTransactions" ? initialTransactions.filter(t=>t.amount>0) : filter === "expenseTransactions" ? initialTransactions.filter(t=>t.amount<0) : initialTransactions;
+function BalanceTransactionPage({ filter, transactions, openTransaction }: { filter: "transactions" | "incomeTransactions" | "expenseTransactions"; transactions: Transaction[]; openTransaction: (transaction: Transaction) => void }) {
+  const rows = filter === "incomeTransactions" ? transactions.filter(t=>t.kind==="income") : filter === "expenseTransactions" ? transactions.filter(t=>t.kind==="expense"||t.kind==="refund") : transactions;
   const total = rows.reduce((sum,t)=>sum+t.amount,0);
-  return <article className="panel month-transactions"><div className="month-total">Totale <strong className={total>=0?"positive":""}>{total>=0?"+ ":"− "}{money(Math.abs(total))}</strong></div>{rows.map(t=><TransactionRow key={t.id} t={t}/>)}</article>;
+  return <article className="panel month-transactions"><div className="month-total">Totale <strong className={total>=0?"positive":""}>{total>=0?"+ ":"− "}{money(Math.abs(total))}</strong></div>{rows.map(t=><TransactionRow key={t.id} t={t} onOpen={openTransaction}/>)}{!rows.length&&<div className="empty">Nessun movimento nel mese selezionato.</div>}</article>;
 }
 
-function BalanceMonthDetail({ detail }: { detail: "income" | "expense" }) {
+function BalanceMonthDetail({ detail, transactions }: { detail: "income" | "expense"; transactions: Transaction[] }) {
   const income = detail === "income";
-  const rows = income ? [["Stipendio","€ 2.450,00","75%"],["Rimborsi","€ 520,00","16%"],["Altre entrate","€ 280,00","9%"]] : [["Casa","€ 461,30","31%"],["Cibo e bevande","€ 356,70","24%"],["Trasporti","€ 267,50","18%"],["Altro","€ 400,80","27%"]];
-  return <div className="category-detail"><div className={`large-donut ${income?"income":"expense"}`}><div><strong>{income?"€ 3.250,00":"€ 1.486,30"}</strong><span>{income?"Entrate":"Uscite"}</span></div></div>{rows.map((r,i)=><div className="legend-row" key={r[0]}><i className={`legend-c${i}`}/><b>{r[0]}</b><span>{r[2]}</span><strong>{r[1]}</strong></div>)}</div>
+  const relevant=transactions.filter(item=>income?item.kind==="income":item.kind==="expense"||item.kind==="refund");
+  const grouped=new Map<string,number>();
+  relevant.forEach(item=>{const name=item.category||"Senza categoria";const value=income?Math.abs(item.amount):item.kind==="refund"?-Math.abs(item.amount):Math.abs(item.amount);grouped.set(name,(grouped.get(name)||0)+value);});
+  const rows=Array.from(grouped.entries()).filter(([,value])=>value>0).sort((a,b)=>b[1]-a[1]);
+  const total=income?relevant.reduce((sum,item)=>sum+Math.abs(item.amount),0):netExpenses(relevant);
+  return <div className="category-detail"><div className={`large-donut ${income?"income":"expense"}`}><div><strong>{money(total)}</strong><span>{income?"Entrate":"Uscite nette"}</span></div></div>{rows.map(([name,value],i)=><div className="legend-row" key={name}><i className={`legend-c${i%4}`}/><b>{name}</b><span>{total>0?`${Math.round(value/total*100)}%`:"0%"}</span><strong>{money(value)}</strong></div>)}{!rows.length&&<div className="empty">Nessun movimento nel mese selezionato.</div>}</div>
 }
 
 function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,onDuplicate}:{recurrences:MoneyRecurrence[];accounts:MoneyAccount[];cards:MoneyCard[];categories:MoneyCategory[];refresh:()=>Promise<void>;onEdit:(recurrence:MoneyRecurrence)=>void;onDuplicate:(recurrence:MoneyRecurrence)=>void}) {
