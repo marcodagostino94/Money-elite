@@ -100,6 +100,24 @@ input,textarea,select{font-size:16px}
   .account-menu button svg,.transaction-detail-menu button svg{width:20px;height:20px}
 }
 
+/* v4.7.1 — gerarchia visiva di contenitori e sottoconti */
+.account-hierarchy{display:grid;gap:10px}
+.account-master{border:1px solid #cfded8;border-radius:15px;background:#f5faf8;overflow:visible;box-shadow:0 5px 16px rgba(33,91,72,.06)}
+.account-master-row{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 40px;align-items:center;background:linear-gradient(135deg,#e7f4ef,#f4f8f6);border-radius:14px}
+.master-toggle{display:grid;grid-template-columns:42px minmax(0,1fr) auto 22px;align-items:center;gap:11px;min-width:0;padding:12px 8px 12px 13px;border:0;background:transparent;text-align:left;color:#20242a}
+.master-toggle>span:nth-child(2){min-width:0}.master-toggle small{display:block;margin-bottom:2px;color:#47816c;font-size:9px;font-weight:800;letter-spacing:.08em}.master-toggle b{display:block;overflow:hidden;text-overflow:ellipsis;font-size:17px;white-space:nowrap}.master-toggle>strong{color:#2d7d60;font-size:16px;white-space:nowrap}
+.master-more{width:35px;height:35px;border:0;background:#fff;border-radius:9px;display:grid;place-items:center}.master-menu{right:6px;top:52px}
+.account-children{position:relative;display:grid;gap:7px;padding:4px 8px 9px 28px}
+.account-children:before{content:"";position:absolute;left:16px;top:0;bottom:22px;width:2px;background:#93bfad}
+.account-child-row{position:relative;margin:0!important;border-color:#dce5e1!important;background:#fff!important;box-shadow:0 2px 8px rgba(26,64,52,.05)!important}
+.account-child-row:before{content:"";position:absolute;left:-13px;top:50%;width:13px;height:2px;background:#93bfad}
+.account-role-label{display:block!important;margin:0 0 1px!important;color:#638b7c!important;font-size:8px!important;font-weight:800!important;letter-spacing:.08em}
+.interest-label{display:block;margin-top:3px;color:#4a8d72;font-size:10px;font-weight:650}
+.hierarchical-account-select{font-weight:650}
+@media(max-width:620px){
+  .account-hierarchy{gap:8px}.master-toggle{grid-template-columns:36px minmax(0,1fr) auto 18px;gap:7px;padding:9px 5px 9px 9px}.master-toggle b{font-size:14px}.master-toggle>strong{font-size:14px}.master-toggle small{font-size:7px}.account-children{padding:3px 5px 7px 21px}.account-children:before{left:11px}.account-child-row:before{left:-11px;width:11px}.account-role-label{font-size:7px!important}.interest-label{font-size:9px}
+}
+
 /* v4.6 — patrimonio compatto, saldi selezionati e storico annuale */
 .dashboard-wealth-overview{margin:0!important;min-width:0;display:flex;flex-direction:column;justify-content:space-between;text-align:left}
 .wealth-main-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(210px,1.1fr);gap:16px;min-width:0}
