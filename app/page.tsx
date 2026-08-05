@@ -67,6 +67,10 @@ type AccountDraft = {
   icon: string;
   currency: string;
   exchangeRate: number;
+  isContainer: boolean;
+  parentAccountId: string | null;
+  accountRole: MoneyAccount["accountRole"];
+  annualInterestRate: number;
 };
 
 type DashboardPreferences = {
@@ -474,14 +478,30 @@ function Header({ active }: { active: Section }) {
   );
 }
 
-function Sparkline({ mode = "wealth", weekData = [] }: { mode?: "wealth" | "week" | "month"; weekData?: { date: string; value: number }[] }) {
+function Sparkline({ mode = "wealth", weekData = [], wealthData = [] }: { mode?: "wealth" | "week" | "month"; weekData?: { date: string; value: number }[]; wealthData?: { label: string; value: number }[] }) {
   if (mode === "week") {
     const maximum=Math.max(1,...weekData.map(day=>day.value));
     return <div className="weekly-bars" aria-label="Spese degli ultimi sette giorni">
       {weekData.map(({date,value})=><div className="week-bar" key={date}><b>{money(value)}</b><i style={{height:`${value>0?Math.max(5,value/maximum*100):0}%`}}/><span>{date.slice(8,10)}/{date.slice(5,7)}</span></div>)}
     </div>;
   }
-  const months = mode === "wealth" ? ["Ago","Ott","Dic","Feb","Apr","Giu","Lug"] : ["1","5","10","15","20","25","29"];
+  if (mode === "wealth") {
+    const values=wealthData.map(point=>point.value);
+    const minimum=Math.min(...values,0);
+    const maximum=Math.max(...values,1);
+    const range=Math.max(maximum-minimum,1);
+    const points=wealthData.map((point,index)=>`${wealthData.length>1?index/(wealthData.length-1)*100:50},${36-(point.value-minimum)/range*30}`).join(" ");
+    return <div className="sparkline wealth wealth-history" aria-label="Andamento del patrimonio negli ultimi dodici mesi">
+      <div className="chart-grid"><span/><span/><span/><span/></div>
+      <svg viewBox="0 0 100 42" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="wealth-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4292b8" stopOpacity=".42"/><stop offset="100%" stopColor="#4292b8" stopOpacity=".05"/></linearGradient></defs>
+        <polygon points={`0,42 ${points} 100,42`} fill="url(#wealth-fill)"/>
+        <polyline points={points} fill="none" stroke="#237ca8" strokeWidth="2.4" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+      <div className="chart-months">{wealthData.map((point,index)=><span key={`${point.label}-${index}`}>{point.label}</span>)}</div>
+    </div>;
+  }
+  const months = ["1","5","10","15","20","25","29"];
   return (
     <div className={`sparkline ${mode}`} aria-label="Grafico finanziario">
       <div className="chart-grid"><span /><span /><span /><span /></div>
@@ -504,7 +524,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const income = monthTransactions.filter(transaction=>transaction.kind==="income").reduce((sum,transaction)=>sum+inPrimary(transaction),0);
   const expenses = Math.max(0,monthTransactions.filter(transaction=>transaction.kind==="expense").reduce((sum,transaction)=>sum+inPrimary(transaction),0)-monthTransactions.filter(transaction=>transaction.kind==="refund"||transaction.isRefund).reduce((sum,transaction)=>sum+inPrimary(transaction),0));
   const balance = income-expenses;
-  const visibleAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
+  const visibleAccounts = accounts.filter(account=>!account.archived&&!account.hidden&&!account.isContainer);
   const dashboardAccounts = dashboardAccountIds
     .map(id=>visibleAccounts.find(account=>account.id===id))
     .filter((account): account is MoneyAccount=>Boolean(account));
@@ -518,6 +538,22 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const netPrimary=(rows:Transaction[])=>Math.max(0,rows.filter(t=>t.kind==="expense").reduce((sum,t)=>sum+inPrimary(t),0)-rows.filter(t=>t.kind==="refund"||t.isRefund).reduce((sum,t)=>sum+inPrimary(t),0));
   const weekData=Array.from({length:7},(_,index)=>{const date=new Date(sevenDaysAgo);date.setDate(sevenDaysAgo.getDate()+index);const iso=toIsoDate(date);return {date:iso,value:netPrimary(effectiveTransactions.filter(transaction=>transaction.dateISO===iso))};});
   const weekExpenses = netPrimary(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today));
+  const transactionWealthEffect=(transaction:Transaction)=>{
+    const source=accounts.find(account=>account.id===transaction.accountId||account.name===transaction.account);
+    const sourceValue=Math.abs(transaction.amount)/Math.max(source?.exchangeRate||1,.00000001);
+    if(transaction.kind==="transfer"){
+      const destination=accounts.find(account=>account.id===transaction.destinationAccountId||account.name===transaction.destinationAccountName);
+      const destinationValue=Math.abs(transaction.destinationAmount??transaction.amount)/Math.max(destination?.exchangeRate||1,.00000001);
+      return destinationValue-sourceValue;
+    }
+    return transaction.kind==="expense"||transaction.kind==="card_repayment"?-sourceValue:sourceValue;
+  };
+  const wealthData=Array.from({length:12},(_,index)=>{
+    const month=new Date(); month.setDate(1); month.setMonth(month.getMonth()-11+index);
+    const cutoff=index===11?today:toIsoDate(new Date(month.getFullYear(),month.getMonth()+1,0,12));
+    const laterEffect=effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>cutoff&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+transactionWealthEffect(transaction),0);
+    return {label:new Intl.DateTimeFormat("it-IT",{month:"short"}).format(month).replace(".",""),value:wealth-laterEffect};
+  });
   const recurrenceDuePending = recurrences
     .filter(item=>item.active&&item.nextDate<=today)
     .map(recurrence=>{
@@ -559,7 +595,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const duePending = [...recurrenceDuePending,...additionalPending]
     .sort((a,b)=>(a.dueDate||a.dateISO||"").localeCompare(b.dueDate||b.dateISO||""));
   const futurePlanned = recurrences
-    .filter(item=>item.active&&!item.isSubscription&&item.nextDate>today)
+    .filter(item=>item.active&&item.nextDate>today)
     .sort((a,b)=>a.nextDate.localeCompare(b.nextDate))
     .slice(0,5);
   const recent = transactions.filter(item=>!item.dueDate||item.confirmedAt).slice(0,5);
@@ -588,25 +624,27 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
           </div>
         </button>
 
-        <article className="dashboard-accounts-card panel">
-          <div className="panel-title"><div><h3>Conti</h3><p>I saldi che vuoi controllare subito</p></div><button className="text-button" onClick={()=>setActive("Impostazioni")}>Preferenze</button></div>
-          <div className="dashboard-account-list">
-            {dashboardAccounts.map(account=><button key={account.id} onClick={()=>setActive("Conti")}><span className="dashboard-account-icon"><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{accountMoney(account.balance,account.currency)}</strong></button>)}
-            {!dashboardAccounts.length&&<div className="dashboard-empty-accounts">Scegli i conti da mostrare nelle Impostazioni.</div>}
+        <article className="balance-card dark dashboard-wealth-card dashboard-wealth-overview">
+          <div className="wealth-main-grid">
+            <button className="wealth-total-link" onClick={()=>setActive("Conti")}>
+              <div className="card-heading"><span>Patrimonio totale</span><AppIcon name="forward" size={18}/></div>
+              <div className="wealth-total-line"><h2>{primaryMoney(wealth)}</h2>{foreignHoldings.length>0&&<div className="foreign-holdings">{foreignHoldings.map(([currency,value])=><span key={currency}>di cui {accountMoney(value,currency)}</span>)}</div>}</div>
+            </button>
+            <div className="wealth-account-balances">
+              <div className="wealth-account-heading"><strong>Saldi conti</strong><button onClick={()=>setActive("Impostazioni")}>Preferenze</button></div>
+              <div className="wealth-account-list">
+                {dashboardAccounts.map(account=><button key={account.id} onClick={()=>setActive("Conti")}><span>{account.name}</span><b>{accountMoney(account.balance,account.currency)}</b></button>)}
+                {!dashboardAccounts.length&&<p>Scegli i conti da mostrare nelle Impostazioni.</p>}
+              </div>
+            </div>
+          </div>
+          <div className="balance-breakdown">
+            <div><small>LIQUIDITÀ</small><b>{primaryMoney(liquidity)}</b></div>
+            <div><small>CARTA DI CREDITO</small><b className="card-debt">{primaryMoney(-cardDebt)}</b></div>
+            <div><small>RISPARMI</small><b>{primaryMoney(savings)}</b></div>
           </div>
         </article>
       </section>
-
-      <button className="balance-card dark heritage-link dashboard-wealth-card" onClick={()=>setActive("Conti")}>
-        <div className="card-heading"><span>Patrimonio totale</span><AppIcon name="forward" size={18}/></div>
-        <h2>{primaryMoney(wealth)}</h2>
-        {foreignHoldings.length>0&&<div className="foreign-holdings">{foreignHoldings.map(([currency,value])=><span key={currency}>di cui {accountMoney(value,currency)}</span>)}</div>}
-        <div className="balance-breakdown">
-          <div><small>LIQUIDITÀ</small><b>{primaryMoney(liquidity)}</b></div>
-          <div><small>CARTA DI CREDITO</small><b className="card-debt">{primaryMoney(-cardDebt)}</b></div>
-          <div><small>RISPARMI</small><b>{primaryMoney(savings)}</b></div>
-        </div>
-      </button>
 
       <section className="panel insight-panel dashboard-spending-chart">
         <div className="panel-title dashboard-chart-title"><div><h3>Andamento finanziario</h3><p>Spese recenti e patrimonio complessivo</p></div></div>
@@ -614,7 +652,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
           <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Ultimi 7 giorni</span><b>{primaryMoney(weekExpenses)}</b></button>
           <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>{primaryMoney(wealth)}</b></button>
         </div>
-        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"PATRIMONIO ATTUALE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(wealth)}</h3></div><Sparkline mode={chart} weekData={weekData}/></div>
+        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"ULTIMI 12 MESI"}</small><h3>{chart==="week"?`Media ${primaryMoney(weekExpenses/7)} al giorno`:primaryMoney(wealth)}</h3></div><Sparkline mode={chart} weekData={weekData} wealthData={wealthData}/></div>
       </section>
 
       <section className="dashboard-stack">
@@ -739,7 +777,8 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   );
 }
 
-function AccountModal({ account, primaryCurrency = typeof window!=="undefined"?(window.localStorage.getItem(PRIMARY_CURRENCY_KEY)||"EUR"):"EUR", close, save }: { account?: MoneyAccount; primaryCurrency?:string; close: () => void; save: (draft: AccountDraft, account?: MoneyAccount) => Promise<void> }) {
+function AccountModal({ account, accounts = [], primaryCurrency = typeof window!=="undefined"?(window.localStorage.getItem(PRIMARY_CURRENCY_KEY)||"EUR"):"EUR", close, save }: { account?: MoneyAccount; accounts?: MoneyAccount[]; primaryCurrency?:string; close: () => void; save: (draft: AccountDraft, account?: MoneyAccount) => Promise<void> }) {
+  const [availableAccounts,setAvailableAccounts]=useState<MoneyAccount[]>(accounts);
   const [name, setName] = useState(account?.name ?? "");
   const [type, setType] = useState<MoneyAccount["type"]>(account?.type ?? "bank");
   const [openingBalance, setOpeningBalance] = useState(account ? amountInput(account.openingBalance) : "");
@@ -748,17 +787,28 @@ function AccountModal({ account, primaryCurrency = typeof window!=="undefined"?(
   const [icon,setIcon]=useState(account?.icon ?? "bank");
   const [currency,setCurrency]=useState(account?.currency ?? primaryCurrency);
   const [exchangeRate,setExchangeRate]=useState(account?.exchangeRate ? String(account.exchangeRate).replace(".",",") : "1");
+  const [isContainer,setIsContainer]=useState(account?.isContainer??false);
+  const [parentAccountId,setParentAccountId]=useState(account?.parentAccountId??"");
+  const [accountRole,setAccountRole]=useState<MoneyAccount["accountRole"]>(account?.accountRole??"standard");
+  const [annualInterestRate,setAnnualInterestRate]=useState(amountInput(account?.annualInterestRate));
   const [busy, setBusy] = useState(false);
   const parsedVoucherValue = parseItalianAmount(voucherUnitValue) || 8;
   const accountIcons=["bank","cash","savings","voucher","card","building","finance","home","car","travel","work"];
-  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type,openingBalance:parseItalianAmount(openingBalance),voucherUnitValue:type==="meal_vouchers"?parsedVoucherValue:null,notes,icon,currency,exchangeRate:currency===primaryCurrency?1:Math.max(.00000001,parseItalianAmount(exchangeRate))},account);setBusy(false)}}>
+  useEffect(()=>{
+    if(accounts.length){setAvailableAccounts(accounts);return;}
+    void getSupabaseBrowserClient().from("accounts").select("*").is("archived_at",null).then(({data})=>setAvailableAccounts((data||[]).map(row=>({id:row.id,name:row.name,type:row.type,openingBalance:Number(row.opening_balance||0),balance:0,voucherUnitValue:null,voucherCount:0,hidden:false,archived:false,icon:row.icon||"bank",color:row.color||"#7051bf",notes:row.notes||"",currency:row.currency||"EUR",exchangeRate:Number(row.exchange_rate||1),sortOrder:Number(row.sort_order||0),isContainer:Boolean(row.is_container),parentAccountId:row.parent_account_id||null,accountRole:row.account_role||"standard",annualInterestRate:Number(row.annual_interest_rate||0),interestLastAccrualDate:row.interest_last_accrual_date||null}))));
+  },[accounts]);
+  const containers=availableAccounts.filter(item=>item.isContainer&&!item.archived&&item.id!==account?.id);
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type:isContainer?"other":type,openingBalance:isContainer?0:parseItalianAmount(openingBalance),voucherUnitValue:!isContainer&&type==="meal_vouchers"?parsedVoucherValue:null,notes,icon,currency,exchangeRate:currency===primaryCurrency?1:Math.max(.00000001,parseItalianAmount(exchangeRate)),isContainer,parentAccountId:isContainer?null:parentAccountId||null,accountRole:isContainer?"standard":accountRole,annualInterestRate:!isContainer&&accountRole==="deposit"?Math.max(0,parseItalianAmount(annualInterestRate)):0},account);setBusy(false)}}>
     <div className="modal-title"><div><small>{account?"MODIFICA CONTO":"NUOVO CONTO"}</small><h2>{account?account.name:"Crea nuovo conto"}</h2></div></div>
     <label>Nome<input required value={name} onChange={event=>setName(event.target.value)} placeholder="Es. Conto principale"/></label>
-    <label>Tipo di conto<select value={type} onChange={event=>setType(event.target.value as MoneyAccount["type"])} disabled={Boolean(account)}><option value="bank">Conto corrente</option><option value="cash">Contanti</option><option value="savings">Conto deposito</option><option value="meal_vouchers">Buoni pasto</option><option value="other">Altro</option></select></label>
+    <label>Struttura<select value={isContainer?"container":"account"} onChange={event=>setIsContainer(event.target.value==="container")} disabled={Boolean(account)}><option value="account">Conto operativo</option><option value="container">Conto contenitore</option></select><small>{isContainer?"Raggruppa più conti senza avere un saldo proprio.":"Può ricevere transazioni e trasferimenti."}</small></label>
+    {!isContainer&&<><label>Tipo di conto<select value={type} onChange={event=>setType(event.target.value as MoneyAccount["type"])} disabled={Boolean(account)}><option value="bank">Conto corrente</option><option value="cash">Contanti</option><option value="savings">Conto deposito</option><option value="meal_vouchers">Buoni pasto</option><option value="other">Altro</option></select></label><label>Appartiene a<select value={parentAccountId} onChange={event=>setParentAccountId(event.target.value)}><option value="">Nessun contenitore</option>{containers.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select></label>{parentAccountId&&<label>Ruolo nel contenitore<select value={accountRole} onChange={event=>{const role=event.target.value as MoneyAccount["accountRole"];setAccountRole(role);if(role==="deposit")setType("savings")}}><option value="main">Conto principale</option><option value="pocket">Pocket</option><option value="deposit">Conto deposito</option><option value="standard">Altro</option></select></label>}</>}
     <label>Valuta<select value={currency} onChange={event=>{setCurrency(event.target.value);if(event.target.value===primaryCurrency)setExchangeRate("1")}} disabled={type==="meal_vouchers"}>{ISO_CURRENCIES.map(value=><option key={value}>{value}</option>)}</select></label>
-    {currency!==primaryCurrency&&type!=="meal_vouchers"&&<label>Tasso fisso del conto<span className="exchange-rate-input"><b>1 {primaryCurrency} =</b><input required type="text" inputMode="decimal" value={exchangeRate} onChange={event=>setExchangeRate(event.target.value)}/><b>{currency}</b></span><small>Usato per patrimonio, Dashboard, budget e statistiche.</small></label>}
+    {!isContainer&&currency!==primaryCurrency&&type!=="meal_vouchers"&&<label>Tasso fisso del conto<span className="exchange-rate-input"><b>1 {primaryCurrency} =</b><input required type="text" inputMode="decimal" value={exchangeRate} onChange={event=>setExchangeRate(event.target.value)}/><b>{currency}</b></span><small>Usato per patrimonio, Dashboard, budget e statistiche.</small></label>}
     <div className="account-icon-field"><span>Icona del conto</span><div className="account-icon-choices">{accountIcons.map(value=><button type="button" className={icon===value?"selected":""} key={value} onClick={()=>setIcon(value)}><AppIcon name={value} size={19}/></button>)}</div></div>
-    {type==="meal_vouchers"?<><label>Valore di ogni buono<div className="amount-input"><span>€</span><input type="text" inputMode="decimal" value={voucherUnitValue} onChange={event=>setVoucherUnitValue(event.target.value)} placeholder="8,00"/></div></label><label>Numero iniziale di buoni<input type="text" inputMode="numeric" value={openingBalance ? String(Math.round(parseItalianAmount(openingBalance)/parsedVoucherValue)) : ""} onChange={event=>setOpeningBalance(String(Math.max(0, Number(event.target.value)||0)*parsedVoucherValue).replace(".",","))} placeholder="0"/></label></>:<label>Importo iniziale<input type="text" inputMode="decimal" value={openingBalance} onChange={event=>setOpeningBalance(event.target.value)} placeholder="0,00"/></label>}
+    {!isContainer&&(type==="meal_vouchers"?<><label>Valore di ogni buono<div className="amount-input"><span>€</span><input type="text" inputMode="decimal" value={voucherUnitValue} onChange={event=>setVoucherUnitValue(event.target.value)} placeholder="8,00"/></div></label><label>Numero iniziale di buoni<input type="text" inputMode="numeric" value={openingBalance ? String(Math.round(parseItalianAmount(openingBalance)/parsedVoucherValue)) : ""} onChange={event=>setOpeningBalance(String(Math.max(0, Number(event.target.value)||0)*parsedVoucherValue).replace(".",","))} placeholder="0"/></label></>:<label>Importo iniziale<input type="text" inputMode="decimal" value={openingBalance} onChange={event=>setOpeningBalance(event.target.value)} placeholder="0,00"/></label>)}
+    {!isContainer&&accountRole==="deposit"&&<label>Interesse annuo lordo (%)<input type="text" inputMode="decimal" value={annualInterestRate} onChange={event=>setAnnualInterestRate(event.target.value)} placeholder="2,00"/><small>L’interesse viene calcolato sul saldo e accreditato ogni giorno.</small></label>}
     <label>Note<input value={notes} onChange={event=>setNotes(event.target.value)} placeholder="Opzionale"/></label>
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer" disabled={busy}>{busy?"Salvataggio…":"Salva"}</button></div>
   </form></div>;
@@ -770,9 +820,11 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailMonth, setDetailMonth] = useState(monthKeyFromDate(new Date()));
   const [archivedOpen,setArchivedOpen]=useState(false);
-  const activeAccounts = accounts.filter(account=>!account.archived);
+  const rawActiveAccounts = accounts.filter(account=>!account.archived);
+  const operationalAccounts = rawActiveAccounts.filter(account=>!account.isContainer);
+  const activeAccounts = rawActiveAccounts.filter(account=>!account.parentAccountId).flatMap(root=>root.isContainer?[{...root,balance:rawActiveAccounts.filter(child=>child.parentAccountId===root.id&&!child.hidden).reduce((sum,child)=>sum+child.balance/Math.max(child.exchangeRate||1,.00000001),0),currency:"EUR"},...rawActiveAccounts.filter(child=>child.parentAccountId===root.id)]:[root]);
   const archivedAccounts = accounts.filter(account=>account.archived);
-  const visibleTotal = activeAccounts.filter(account=>!account.hidden).reduce((sum,account)=>sum+account.balance/Math.max(account.exchangeRate||1,.00000001),0);
+  const visibleTotal = operationalAccounts.filter(account=>!account.hidden).reduce((sum,account)=>sum+account.balance/Math.max(account.exchangeRate||1,.00000001),0);
   const detail = accounts.find(account=>account.id===detailId);
   if(detail) {
     const accountTransactions = transactions.filter(transaction=>isEffectiveTransaction(transaction) && (transaction.accountId===detail.id || transaction.destinationAccountId===detail.id));
@@ -943,7 +995,7 @@ function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,on
   const [selected,setSelected]=useState<MoneyRecurrence|null>(null);
   const [working,setWorking]=useState(false);
   const [showPaused,setShowPaused]=useState(false);
-  const plannedRecurrences=recurrences.filter(item=>!item.isSubscription);
+  const plannedRecurrences=recurrences;
   const pausedCount=plannedRecurrences.filter(item=>!item.active).length;
   const items=plannedRecurrences.filter(item=>item.active||showPaused).sort((a,b)=>a.nextDate.localeCompare(b.nextDate));
   const currentMonth=monthKeyFromDate(new Date());
@@ -995,7 +1047,7 @@ function ReportSection() {
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.5.2</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.5.2 riporta ogni sezione automaticamente all’inizio quando viene aperta.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.7</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Conti contenitore, Pocket e depositi con interesse annuo e accrediti automatici giornalieri.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1077,7 +1129,7 @@ function TemplateManagementVisual({accounts,categories}:{accounts:MoneyAccount[]
 }
 
 function SettingsSection({ accounts, categories, primaryCurrency, onChangePrimaryCurrency, dashboardAccountIds, onChangeDashboardAccounts }: { accounts: MoneyAccount[]; categories: MoneyCategory[]; primaryCurrency:string; onChangePrimaryCurrency:(currency:string)=>Promise<void>; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids: string[]) => void }) {
-  const selectableAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
+  const selectableAccounts = accounts.filter(account=>!account.archived&&!account.hidden&&!account.isContainer);
   const toggleDashboardAccount = (accountId:string) => {
     const next = dashboardAccountIds.includes(accountId)
       ? dashboardAccountIds.filter(id=>id!==accountId)
@@ -1127,10 +1179,10 @@ function TransactionsSection({ transactions, openTransaction }: { transactions: 
 }
 
 function TransactionModal({ kind, close, add, accounts, cards, categories, preset = "normal", defaultAccount, cardId, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; cards: MoneyCard[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
-  const usableAccounts = accounts.filter(account => !account.archived);
-  const [from, setFrom] = useState(defaultAccount || initial?.account || usableAccounts[0]?.name || "");
+  const usableAccounts = accounts.filter(account => !account.archived&&!account.isContainer);
+  const [from, setFrom] = useState((defaultAccount&&usableAccounts.some(account=>account.name===defaultAccount)?defaultAccount:"") || initial?.account || usableAccounts[0]?.name || "");
   const [to, setTo] = useState(initial?.destinationAccountName || initial?.destinationAccountId || usableAccounts.find(account => account.name !== (defaultAccount || initial?.account || usableAccounts[0]?.name))?.name || "");
-  const [selectedAccount, setSelectedAccount] = useState(defaultAccount || initial?.account || "");
+  const [selectedAccount, setSelectedAccount] = useState((defaultAccount&&usableAccounts.some(account=>account.name===defaultAccount)?defaultAccount:"") || initial?.account || "");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(cardId || initial?.cardId || null);
   const [accounted, setAccounted] = useState(initial?.accounted ?? false);
   const [planned, setPlanned] = useState(initial?.planned ?? (preset !== "normal"));
@@ -1322,11 +1374,39 @@ export default function Home() {
     return()=>window.cancelAnimationFrame(frame);
   },[active]);
   const refreshSequence = useRef(0);
+  const accrueDailyInterest = async (data:Awaited<ReturnType<typeof loadMoneyData>>,activeUser:User) => {
+    const deposits=data.accounts.filter(account=>!account.archived&&!account.isContainer&&account.accountRole==="deposit"&&account.annualInterestRate>0);
+    if(!deposits.length)return false;
+    const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);const cutoff=toIsoDate(yesterday);
+    let changed=false;
+    for(const account of deposits){
+      const last=account.interestLastAccrualDate||cutoff;
+      const cursor=new Date(`${last}T12:00:00`);cursor.setDate(cursor.getDate()+1);
+      let generated=0;
+      while(toIsoDate(cursor)<=cutoff){
+        const date=toIsoDate(cursor);
+        const balanceAtDate=account.openingBalance+data.transactions.filter(transaction=>(transaction.accountId===account.id||transaction.destinationAccountId===account.id)&&(!transaction.dueDate||transaction.confirmedAt)&&transaction.transactionDate<=date).reduce((sum,transaction)=>{
+          if(transaction.kind==="transfer")return transaction.accountId===account.id?sum-transaction.amount:sum+(transaction.destinationAmount??transaction.amount);
+          if(transaction.accountId!==account.id)return sum;
+          return sum+(transaction.kind==="expense"||transaction.kind==="card_repayment"?-transaction.amount:transaction.amount);
+        },0)+generated;
+        const interest=Math.round(Math.max(0,balanceAtDate)*account.annualInterestRate/100/365*100)/100;
+        if(interest>0){
+          const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:activeUser.id,kind:"income",account_id:account.id,amount:interest,transaction_date:date,confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:"Interesse giornaliero automatico"});
+          if(!error){generated+=interest;changed=true}else if(error.code!=="23505")throw error;
+        }
+        cursor.setDate(cursor.getDate()+1);
+      }
+      if(!account.interestLastAccrualDate||last<cutoff){const {error}=await getSupabaseBrowserClient().from("accounts").update({interest_last_accrual_date:cutoff}).eq("id",account.id);if(error)throw error;changed=true;}
+    }
+    return changed;
+  };
   const refreshData = async (activeUser = user) => {
     if (!activeUser) return;
     const sequence = ++refreshSequence.current;
     try {
-      const data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
+      let data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
+      if(await accrueDailyInterest(data,activeUser))data=await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
 
       // Saving a transaction triggers both the explicit refresh below and a
       // Supabase realtime event. Never let an older/slower refresh overwrite a
@@ -1545,6 +1625,11 @@ export default function Home() {
       icon: draft.icon,
       currency: draft.currency,
       exchange_rate: draft.type === "meal_vouchers" ? 1 : draft.exchangeRate,
+      is_container: draft.isContainer,
+      parent_account_id: draft.parentAccountId,
+      account_role: draft.accountRole,
+      annual_interest_rate: draft.annualInterestRate,
+      interest_last_accrual_date: account?.interestLastAccrualDate ?? (draft.accountRole==="deposit"?toIsoDate(new Date(Date.now()-86400000)):null),
       sort_order: account?.sortOrder ?? Math.max(-1,...accounts.map(item=>item.sortOrder||0))+1,
       color: draft.type === "meal_vouchers" ? "#7051bf" : "#4f9d82",
     };
@@ -1561,12 +1646,14 @@ export default function Home() {
     await refreshData();
   };
   const archiveAccount = async (account: MoneyAccount) => {
+    if(account.isContainer&&accounts.some(item=>item.parentAccountId===account.id&&!item.archived)){setDataError("Prima di archiviare un contenitore, sposta o archivia tutti i conti che contiene.");return;}
     if(!window.confirm(`Archiviare il conto “${account.name}”? Le transazioni resteranno nei bilanci e non sarà più possibile aggiungerne di nuove.`)) return;
     const {error}=await getSupabaseBrowserClient().from("accounts").update({archived_at:new Date().toISOString()}).eq("id",account.id);
     if(error){setDataError(error.message);return;}
     await refreshData();
   };
   const deleteAccount = async (account: MoneyAccount) => {
+    if(account.isContainer&&accounts.some(item=>item.parentAccountId===account.id)){setDataError("Il contenitore non può essere eliminato finché contiene dei conti.");return;}
     if(account.archived){setDataError("Un conto archiviato resta disponibile in sola consultazione e non può essere eliminato.");return;}
     if(!window.confirm(`Eliminare definitivamente “${account.name}” e tutte le transazioni associate? Questa operazione non può essere annullata.`)) return;
     const supabase=getSupabaseBrowserClient();
@@ -1674,7 +1761,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!accounts.length || dashboardAccountIds.length) return;
-    const defaults = accounts.filter(account=>!account.archived&&!account.hidden).slice(0,4).map(account=>account.id);
+    const defaults = accounts.filter(account=>!account.archived&&!account.hidden&&!account.isContainer).slice(0,4).map(account=>account.id);
     if (!defaults.length) return;
     setDashboardAccountIds(defaults);
     window.localStorage.setItem(DASHBOARD_PREFERENCES_KEY, JSON.stringify({accountIds:defaults} satisfies DashboardPreferences));

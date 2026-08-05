@@ -100,6 +100,38 @@ input,textarea,select{font-size:16px}
   .account-menu button svg,.transaction-detail-menu button svg{width:20px;height:20px}
 }
 
+/* v4.6 — patrimonio compatto, saldi selezionati e storico annuale */
+.dashboard-wealth-overview{margin:0!important;min-width:0;display:flex;flex-direction:column;justify-content:space-between;text-align:left}
+.wealth-main-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(210px,1.1fr);gap:16px;min-width:0}
+.wealth-total-link{display:block;min-width:0;padding:0;border:0;background:transparent;color:inherit;text-align:left}
+.wealth-total-link .card-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.wealth-total-line{display:flex;align-items:center;flex-wrap:wrap;gap:5px 12px}
+.wealth-total-line h2{margin:10px 0 6px!important;white-space:nowrap}
+.wealth-total-line .foreign-holdings{margin:8px 0 4px!important}
+.wealth-account-balances{min-width:0;padding-left:16px;border-left:1px solid #ffffff24}
+.wealth-account-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+.wealth-account-heading strong{font-size:14px}.wealth-account-heading button{border:0;background:transparent;color:#d9d0f2;font-size:11px;font-weight:700}
+.wealth-account-list{display:grid;max-height:96px;overflow:auto;scrollbar-width:thin}
+.wealth-account-list>button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;width:100%;padding:7px 0;border:0;border-top:1px solid #ffffff17;background:transparent;color:#fff;text-align:left}
+.wealth-account-list>button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.wealth-account-list>button b{font-size:12px;white-space:nowrap}
+.wealth-account-list>p{margin:8px 0;color:#ffffffa8;font-size:11px;line-height:1.35}
+.dashboard-wealth-overview .balance-breakdown{margin-top:10px!important}
+.wealth-history{position:relative;min-height:172px}
+.wealth-history svg{position:absolute;inset:8px 0 25px;width:100%;height:calc(100% - 33px);overflow:visible}
+.wealth-history .chart-grid{position:absolute;inset:8px 0 25px}
+.wealth-history .chart-months{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(12,1fr);gap:0}
+.wealth-history .chart-months span{text-align:center;text-transform:capitalize;font-size:9px;color:#8a8d93}
+@media(max-width:620px){
+  .wealth-main-grid{grid-template-columns:1fr;gap:9px}
+  .wealth-account-balances{padding:8px 0 0;border-left:0;border-top:1px solid #ffffff24}
+  .wealth-account-list{max-height:82px}
+  .wealth-total-line{flex-wrap:nowrap}.wealth-total-line h2{font-size:25px!important}
+  .wealth-total-line .foreign-holdings{min-width:0;overflow:auto;margin:4px 0!important}
+  .wealth-total-line .foreign-holdings span{font-size:11px!important;white-space:nowrap}
+  .wealth-history{min-height:145px}
+  .wealth-history .chart-months span:nth-child(even){visibility:hidden}
+}
+
 /* v4.3 — conti, valute e selettori visuali */
 .archived-toggle{width:100%;height:42px!important;margin:0!important;padding:0 3px!important;border:0!important;background:transparent!important;display:flex!important;grid-template-columns:none!important;align-items:center;gap:9px!important}
 .archived-toggle b{flex:1;text-align:left;font-size:14px!important}.archived-toggle span{font-size:11px!important;background:#ece9e3;color:#73757a;border-radius:999px;padding:4px 8px;margin:0!important}

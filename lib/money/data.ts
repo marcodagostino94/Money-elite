@@ -16,6 +16,11 @@ export type MoneyAccount = {
   currency: string;
   exchangeRate: number;
   sortOrder: number;
+  isContainer: boolean;
+  parentAccountId: string | null;
+  accountRole: "standard" | "main" | "pocket" | "deposit";
+  annualInterestRate: number;
+  interestLastAccrualDate: string | null;
 };
 
 export type MoneyCategory = {
@@ -331,6 +336,11 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       currency: row.currency || "EUR",
       exchangeRate: Number(row.exchange_rate || 1),
       sortOrder: Number(row.sort_order || 0),
+      isContainer: Boolean(row.is_container),
+      parentAccountId: row.parent_account_id ?? null,
+      accountRole: row.account_role || "standard",
+      annualInterestRate: Number(row.annual_interest_rate || 0),
+      interestLastAccrualDate: row.interest_last_accrual_date ?? null,
     };
   });
 
