@@ -688,3 +688,14 @@ header h1{font-size:25px!important}
   .template-settings-list>div{grid-template-columns:34px minmax(0,1fr) auto 32px 32px;gap:6px}.template-settings-list strong{font-size:12px}
   .template-picker-layer{place-items:end center;padding:0}.template-picker-card{width:100%;max-height:72dvh;border-radius:18px 18px 0 0;padding:16px}
 }
+
+/* v4.7.2 — valuta separata dal valore e pulsanti azione visibili */
+.modal .amount-input>span{left:16px!important;width:76px!important;font-size:19px!important;line-height:1!important;display:flex;align-items:center;pointer-events:none}
+.modal .amount-input>input{padding-left:108px!important;padding-right:16px!important}
+.quick-main,.quick-standalone{background:#0787f5!important;color:#fff!important;box-shadow:0 9px 28px rgba(7,135,245,.38)!important}
+.quick-main:hover,.quick-standalone:hover{background:#0077df!important;transform:translateY(-1px)}
+.quick-actions.open .quick-main{background:#056fd0!important}
+@media(max-width:620px){
+  .modal .amount-input>span{left:13px!important;width:64px!important;font-size:16px!important}
+  .modal .amount-input>input{padding-left:91px!important;padding-right:12px!important}
+}
