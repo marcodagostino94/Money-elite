@@ -9,7 +9,7 @@ Data: 6 agosto 2026
 
 ## Correzioni grafiche
 
-- Il riquadro delle categorie nei Report ora cresce in base al contenuto.
+- Il riquadro delle categorie nel Report interattivo ora cresce realmente in base al contenuto, senza un'altezza massima fissa.
 - Nomi e importi delle categorie restano sempre all'interno della card.
 - I nomi lunghi vanno correttamente a capo senza sovrapporsi agli importi.
 
