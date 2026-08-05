@@ -225,6 +225,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   flame:L.Flame,light:L.Lightbulb,cleaning:L.SprayCan,bike:L.Bike,bus:L.BusFront,beach:L.Umbrella,
   cinema:L.Clapperboard,fun:L.Sparkles,tax:L.ReceiptText,sport:L.Dumbbell,more:L.MoreHorizontal,
   plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,logout:L.LogOut,
+  pause:L.Pause,play:L.Play,copy:L.Copy,
   eye:L.Eye,eyeOff:L.EyeOff,check:L.Check,down:L.ChevronDown,up:L.ChevronUp,clock:L.Clock3,stethoscope:L.Stethoscope,
 };
 
@@ -445,7 +446,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const weekExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
   const monthExpenses = effectiveTransactions.filter(transaction=>transaction.amount<0&&transaction.kind!=="transfer"&&transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today).reduce((sum,transaction)=>sum+Math.abs(transaction.amount),0);
-  const duePending = recurrences
+  const recurrenceDuePending = recurrences
     .filter(item=>item.active&&item.nextDate<=today)
     .map(recurrence=>{
       const existing = transactions.find(item=>item.recurrenceId===recurrence.id&&!item.confirmedAt&&(item.dueDate||item.dateISO)===recurrence.nextDate);
@@ -479,7 +480,11 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
         automaticAccounting:recurrence.automaticAccounting,
         recurrencePlaceholder:true,
       } satisfies Transaction;
-    })
+    });
+  const activeRecurrenceIds = new Set(recurrences.filter(item=>item.active).map(item=>item.id));
+  const pendingKeys = new Set(recurrenceDuePending.map(item=>`${item.recurrenceId}:${item.dueDate||item.dateISO}`));
+  const additionalPending = transactions.filter(item=>item.recurrenceId&&activeRecurrenceIds.has(item.recurrenceId)&&!item.confirmedAt&&Boolean(item.dueDate||item.dateISO)&&(item.dueDate||item.dateISO||"")<=today&&!pendingKeys.has(`${item.recurrenceId}:${item.dueDate||item.dateISO}`));
+  const duePending = [...recurrenceDuePending,...additionalPending]
     .sort((a,b)=>(a.dueDate||a.dateISO||"").localeCompare(b.dueDate||b.dateISO||""));
   const futurePlanned = recurrences
     .filter(item=>item.active&&!item.isSubscription&&item.nextDate>today)
@@ -623,7 +628,7 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
-function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, dashboardAccountIds, onChangeDashboardAccounts, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, editRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids:string[])=>void; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
+function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, dashboardAccountIds, onChangeDashboardAccounts, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, editRecurrence, duplicateRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids:string[])=>void; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; duplicateRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
   const legacyCards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
     Conti: [
       { name: "Conto principale", sub: "Banca ·•• 4832", value: "€ 8.940,65", icon: "B" },
@@ -643,7 +648,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   if (section === "Report") return <ReportSection />;
   if (section === "Impostazioni") return <SettingsSection accounts={accounts} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} />;
-  if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
+  if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence} onDuplicate={duplicateRecurrence}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
   if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} openTransaction={openTransaction}/>;
   if (section === "Carte di credito") return <CreditCardsSection onAdd={onAdd} cards={cards} accounts={accounts} transactions={transactions} refresh={refresh} openTransaction={openTransaction}/>;
@@ -836,19 +841,25 @@ function BalanceMonthDetail({ detail }: { detail: "income" | "expense" }) {
   return <div className="category-detail"><div className={`large-donut ${income?"income":"expense"}`}><div><strong>{income?"€ 3.250,00":"€ 1.486,30"}</strong><span>{income?"Entrate":"Uscite"}</span></div></div>{rows.map((r,i)=><div className="legend-row" key={r[0]}><i className={`legend-c${i}`}/><b>{r[0]}</b><span>{r[2]}</span><strong>{r[1]}</strong></div>)}</div>
 }
 
-function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit}:{recurrences:MoneyRecurrence[];accounts:MoneyAccount[];cards:MoneyCard[];categories:MoneyCategory[];refresh:()=>Promise<void>;onEdit:(recurrence:MoneyRecurrence)=>void}) {
+function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,onDuplicate}:{recurrences:MoneyRecurrence[];accounts:MoneyAccount[];cards:MoneyCard[];categories:MoneyCategory[];refresh:()=>Promise<void>;onEdit:(recurrence:MoneyRecurrence)=>void;onDuplicate:(recurrence:MoneyRecurrence)=>void}) {
+  const [selected,setSelected]=useState<MoneyRecurrence|null>(null);
+  const [working,setWorking]=useState(false);
   const items=recurrences.filter(item=>!item.isSubscription).sort((a,b)=>a.nextDate.localeCompare(b.nextDate));
   const currentMonth=monthKeyFromDate(new Date());
   const signed=(item:MoneyRecurrence)=>item.kind==="expense"?-item.amount:item.amount;
-  const monthTotal=items.filter(item=>item.nextDate.startsWith(currentMonth)).reduce((sum,item)=>sum+signed(item),0);
+  const monthTotal=items.filter(item=>item.active&&item.nextDate.startsWith(currentMonth)).reduce((sum,item)=>sum+signed(item),0);
   const labelFor=(item:MoneyRecurrence)=>{const category=categories.find(c=>c.id===item.categoryId);const parent=category?.parentId?categories.find(c=>c.id===category.parentId):null;if(item.notes)return item.notes;return category?(parent?`${parent.name} › ${category.name}`:category.name):"Pianificata"};
   const accountFor=(item:MoneyRecurrence)=>cards.find(c=>c.id===item.cardId)?.name||accounts.find(a=>a.id===item.accountId)?.name||"Conto";
-  const remove=async(item:MoneyRecurrence)=>{if(!window.confirm("Disattivare questa transazione pianificata?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:false}).eq("id",item.id);if(error){alert(error.message);return;}await refresh();};
-  return <section className="section-page"><article className="panel schedule-list">{items.length?items.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const amount=signed(item);return <div className="schedule-row planned-recurrence-row" key={item.id}><div className="schedule-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={item.kind==="transfer"?"transfer":category?.icon||item.kind}/></div><button className="planned-main" onClick={()=>onEdit(item)}><b>{labelFor(item)}</b><span>{accountFor(item)} · {item.frequency==="monthly"?"Mensile":item.frequency}</span></button><div><strong className={amount>0?"positive":""}>{amount>0?"+":""}{money(amount)}</strong><span>{formatItalianDate(item.nextDate)}</span></div><button className="planned-trash" onClick={()=>void remove(item)} aria-label="Disattiva pianificata"><AppIcon name="trash" size={16}/></button><i className={item.kind==="transfer"?"transfer-line":amount>0?"income-line":"expense-line"}/></div>}):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div></section>
+  const run=async(action:()=>Promise<void>)=>{setWorking(true);try{await action();await refresh();setSelected(null);}catch(error){alert(error instanceof Error?error.message:"Operazione non riuscita.");}finally{setWorking(false);}};
+  const repeatNow=(item:MoneyRecurrence)=>run(async()=>{if(!item.accountId)throw new Error("La pianificata non ha un conto valido.");const supabase=getSupabaseBrowserClient();const {data:{user}}=await supabase.auth.getUser();if(!user)throw new Error("Sessione non disponibile.");const today=toIsoDate(new Date());const {data:existing,error:lookupError}=await supabase.from("transactions").select("id").eq("recurrence_id",item.id).eq("due_date",today).is("confirmed_at",null).limit(1).maybeSingle();if(lookupError)throw lookupError;if(existing)return;const {error}=await supabase.from("transactions").insert({user_id:user.id,kind:item.kind,account_id:item.accountId,destination_account_id:item.kind==="transfer"?item.destinationAccountId:null,card_id:item.cardId,category_id:item.kind==="transfer"?null:item.categoryId,recurrence_id:item.id,transfer_group_id:item.kind==="transfer"?crypto.randomUUID():null,amount:Math.abs(item.amount),transaction_date:today,due_date:today,confirmed_at:null,accounted_at:null,notes:item.notes?.trim()||null});if(error)throw error;});
+  const skip=(item:MoneyRecurrence)=>run(async()=>{const nextDate=nextRecurrenceDate(item);if(!window.confirm(`Saltare la ripetizione del ${formatItalianDate(item.nextDate)}? La nuova scadenza sarà ${formatItalianDate(nextDate)}.`))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({next_date:nextDate}).eq("id",item.id).eq("next_date",item.nextDate);if(error)throw error;});
+  const togglePause=(item:MoneyRecurrence)=>run(async()=>{const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:!item.active}).eq("id",item.id);if(error)throw error;});
+  const remove=(item:MoneyRecurrence)=>run(async()=>{if(!window.confirm("Eliminare definitivamente questa transazione pianificata?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").delete().eq("id",item.id);if(error)throw error;});
+  return <section className="section-page"><article className="panel schedule-list">{items.length?items.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const amount=signed(item);return <button className={`schedule-row planned-recurrence-row ${item.active?"":"paused"}`} key={item.id} onClick={()=>setSelected(item)}><div className="schedule-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={item.kind==="transfer"?"transfer":category?.icon||item.kind}/></div><div className="planned-main"><b>{labelFor(item)}</b><span>{accountFor(item)} · {item.active?(item.frequency==="monthly"?"Mensile":item.frequency):"In pausa"}</span></div><div><strong className={amount>0?"positive":""}>{amount>0?"+":""}{money(amount)}</strong><span>{formatItalianDate(item.nextDate)}</span></div><AppIcon name="more" size={18}/><i className={item.kind==="transfer"?"transfer-line":amount>0?"income-line":"expense-line"}/></button>}):<div className="empty">Nessuna transazione pianificata.</div>}</article><div className="schedule-summary"><span>Questo mese <b className={monthTotal>=0?"positive":""}>{money(monthTotal)}</b></span></div>{selected&&<div className="modal-backdrop planned-menu-backdrop" onMouseDown={()=>!working&&setSelected(null)}><div className="planned-action-menu" onMouseDown={event=>event.stopPropagation()}><div><small>TRANSAZIONE PIANIFICATA</small><h3>{labelFor(selected)}</h3><button onClick={()=>setSelected(null)} aria-label="Chiudi"><AppIcon name="close"/></button></div><button disabled={working||!selected.active} onClick={()=>void repeatNow(selected)}><AppIcon name="repeat"/> Ripeti ora</button><button disabled={working||!selected.active} onClick={()=>void skip(selected)}><AppIcon name="planned"/> Salta questa ripetizione</button><button disabled={working} onClick={()=>{setSelected(null);onEdit(selected)}}><AppIcon name="edit"/> Modifica</button><button disabled={working} onClick={()=>{setSelected(null);onDuplicate(selected)}}><AppIcon name="copy"/> Duplica</button><button disabled={working} onClick={()=>void togglePause(selected)}><AppIcon name={selected.active?"pause":"play"}/> {selected.active?"Metti in pausa":"Riattiva"}</button><button className="danger" disabled={working} onClick={()=>void remove(selected)}><AppIcon name="trash"/> Elimina</button></div></div>}</section>
 }
 
 function SubscriptionsSection({ recurrences, categories, refresh, onEdit }: { recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; refresh: () => Promise<void>; onEdit: (recurrence: MoneyRecurrence) => void }) {
-  const subscriptions=recurrences.filter(item=>item.isSubscription);
+  const subscriptions=recurrences.filter(item=>item.isSubscription&&item.active);
   const totalMonth=subscriptions.reduce((sum,item)=>sum+item.amount,0);
   const remove=async(id:string)=>{if(!window.confirm("Eliminare questo abbonamento?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:false}).eq("id",id);if(error){alert(error.message);return;}await refresh();};
   return <section className="section-page"><div className="subscription-summary"><div><small>PROSSIMI 30 GIORNI</small><strong>{money(totalMonth)}</strong></div><div><small>PROSSIMI 365 GIORNI</small><strong>{money(totalMonth*12)}</strong></div><div><small>MEDIA MENSILE</small><strong>{money(totalMonth)}</strong></div></div><article className="panel subscription-list">{subscriptions.length?subscriptions.map(item=>{const category=categories.find(c=>c.id===item.categoryId);return <div className="subscription-row" key={item.id}><div className="subscription-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={category?.icon||"subscriptions"}/></div><div className="subscription-body subscription-edit-area" role="button" tabIndex={0} onClick={()=>onEdit(item)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")onEdit(item)}}><h3>{item.notes||category?.name||"Abbonamento"}</h3><div className="subscription-dates"><span>Prossima data</span><b>{formatItalianDate(item.nextDate)}</b><span>{item.frequency==="monthly"?"Ogni mese":item.frequency}</span></div><div className="progress"><i style={{width:"45%",background:"#7c65b5"}}/></div><strong>{money(item.amount)} ogni {item.frequency==="monthly"?"mese":item.frequency}</strong><small>{category?.name||"Senza categoria"}</small></div><button type="button" onClick={()=>onEdit(item)} aria-label="Modifica abbonamento"><AppIcon name="edit"/></button><button type="button" onClick={()=>void remove(item.id)} aria-label="Elimina abbonamento"><AppIcon name="trash"/></button></div>}):<div className="empty">Nessun abbonamento. Usa il + per aggiungere una spesa pianificata come abbonamento.</div>}</article></section>;
@@ -1258,7 +1269,7 @@ export default function Home() {
     setModal(null);
     await refreshData(user);
   };
-  const openRecurrenceEditor = (recurrence: MoneyRecurrence) => {
+  const openRecurrenceEditor = (recurrence: MoneyRecurrence, duplicate = false) => {
     const category = categories.find(item => item.id === recurrence.categoryId);
     const parent = category?.parentId ? categories.find(item => item.id === category.parentId) : null;
     const categoryLabel = category ? (parent ? `${parent.name} › ${category.name}` : category.name) : recurrence.kind === "transfer" ? "Trasferimento tra conti" : "Senza categoria";
@@ -1268,7 +1279,7 @@ export default function Home() {
     const voucherValue = accounts.find(item => item.type === "meal_vouchers")?.voucherUnitValue || 8;
     const isVoucher = category?.name === "Buoni pasto";
     const initial: Transaction = {
-      id: recurrence.id,
+      id: duplicate ? crypto.randomUUID() : recurrence.id,
       label: recurrence.notes || category?.name || (recurrence.kind === "transfer" ? "Giroconto" : "Pianificata"),
       category: categoryLabel,
       account: account?.name || "",
@@ -1284,7 +1295,7 @@ export default function Home() {
       accountId: recurrence.accountId ?? undefined,
       cardId: card?.id ?? null,
       categoryId: recurrence.categoryId,
-      recurrenceId: recurrence.id,
+      recurrenceId: duplicate ? null : recurrence.id,
       kind: recurrence.kind,
       voucherCount: isVoucher ? Math.max(1, Math.round(recurrence.amount / voucherValue)) : null,
       planned: true,
@@ -1300,8 +1311,8 @@ export default function Home() {
       defaultAccount: account?.name,
       cardId: card?.id,
       initial,
-      editing: true,
-      recurrenceEditId: recurrence.id,
+      editing: !duplicate,
+      recurrenceEditId: duplicate ? undefined : recurrence.id,
     });
   };
   const accountTransaction = async () => {
@@ -1514,7 +1525,7 @@ export default function Home() {
         <Header active={active} />
         <div className="page-content">
           {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
-          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} recurrences={recurrences} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>}
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} recurrences={recurrences} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} duplicateRecurrence={recurrence=>openRecurrenceEditor(recurrence,true)} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>} 
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}

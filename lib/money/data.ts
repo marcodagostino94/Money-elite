@@ -267,7 +267,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     loadAllTransactions(supabase, userId),
     supabase.from("cards").select("*").order("name"),
     supabase.from("budgets").select("*").order("month", { ascending: false }),
-    supabase.from("recurrences").select("*").eq("active", true).order("next_date"),
+    supabase.from("recurrences").select("*").order("next_date"),
   ]);
   const error = accountsError ?? categoriesError ?? cardsError ?? budgetsError ?? recurrencesError;
   if (error) throw error;
