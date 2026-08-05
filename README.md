@@ -25,10 +25,12 @@ Lo schema completo si trova in `supabase/schema.sql`. Le migrazioni aggiuntive s
 
 ## Versione
 
-Money Elite 4.7.2 — 5 agosto 2026.
+Money Elite 4.7.3 — 6 agosto 2026.
 
 Per attivare il sistema multivaluta completo su un database esistente, eseguire nel SQL Editor di Supabase `supabase/migrations/20260805_multicurrency_complete.sql` una sola volta.
 
 Per sincronizzare l’ordine dei conti tra dispositivi, eseguire anche `supabase/migrations/20260805_account_order_sync.sql` una sola volta.
 
 Per attivare contenitori, Pocket, conti deposito e accrediti giornalieri, eseguire `supabase/migrations/20260805_account_containers_and_interest.sql` una sola volta.
+
+Per aggiungere la categoria degli interessi maturati, eseguire `supabase/migrations/20260806_accrued_interest_category.sql` una sola volta.

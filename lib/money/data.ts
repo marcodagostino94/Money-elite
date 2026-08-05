@@ -93,7 +93,7 @@ export type MoneyRecurrence = {
 
 const categorySeeds: Array<[MoneyCategory["kind"], string, string, string, string[]]> = [
   ["income", "Guadagni", "#26734d", "gift", ["Regalo", "Rimborso"]],
-  ["income", "Proventi Finanziari", "#d9792b", "finance", []],
+  ["income", "Proventi Finanziari", "#d9792b", "finance", ["Interessi maturati"]],
   ["income", "Reddito", "#3d9b69", "income", ["730", "Altri lavori", "Buoni pasto", "Stipendio", "Straordinari"]],
   ["expense", "Abbonamenti", "#7a5ac7", "subscriptions", ["App Store", "Finanziamenti", "iCloud", "Sky e Netflix", "Spotify"]],
   ["expense", "Alimenti", "#42a9c7", "groceries", ["Bar", "Buoni pasto", "Drink", "Pranzi/Cene", "Supermercato"]],
@@ -109,7 +109,7 @@ const categorySeeds: Array<[MoneyCategory["kind"], string, string, string, strin
 const seededChildIcons: Record<string, string> = {
   "730":"document","Abbigliamento":"clothes","Altri lavori":"work","Amazon":"package","App Store":"technology","Arredamento":"furniture",
   "Automobile":"car","Bar":"coffee","Box":"home","Buoni pasto":"voucher","Carburante":"fuel","Cinema":"cinema","Condominio":"building",
-  "Cosmesi":"health","Cura Personale":"health","Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"coffee",
+  "Cosmesi":"health","Cura Personale":"health","Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"coffee","Interessi maturati":"finance",
   "Farmacia":"medical","Finanziamenti":"finance","Gas":"flame","Giardino":"home","Hotel":"building","iCloud":"cloud","Lavori":"hammer",
   "Lenti a contatto":"eye","Luce":"light","Luce e Gas":"energy","Mare":"beach","Medici":"stethoscope","Multe":"tax","Noleggio":"car",
   "Parcheggio":"parking","Pranzi/Cene":"food","Pranzi/Cene Viaggi":"food","Prodotti Casa":"home","Pulizie":"cleaning","Regali":"gift",

@@ -715,7 +715,7 @@ function TransactionRow({ t, onOpen }: { t: Transaction; onOpen?: (t: Transactio
     : `${t.account}${t.notes?.trim() ? ` • ${t.notes.trim()}` : ""}`;
   return (
     <button type="button" className={`transaction-row ${onOpen?"clickable":""}`} onClick={()=>onOpen?.(t)}>
-      <div className={`transaction-icon ${t.color}`} style={{color:t.categoryColor||undefined,background:t.categoryColor?`${t.categoryColor}18`:undefined}}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Non contabilizzata"><AppIcon name="check" size={9}/></i>}</div>
+      <div className={`transaction-icon ${t.color}`} style={{color:t.categoryColor||undefined,background:t.categoryColor?`${t.categoryColor}18`:undefined}}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Da contabilizzare">?</i>}</div>
       <div className="transaction-info"><b>{title}</b><span>{subtitle}</span></div>
       <div className="transaction-amount"><b className={t.amount > 0 ? "positive" : ""}>{t.amount > 0 ? "+" : ""}{accountMoney(t.amount,t.currency)}</b>{t.kind==="transfer"&&t.destinationAmount&&<small>→ {accountMoney(t.destinationAmount,t.destinationCurrency)}</small>}<span>{t.date}</span></div>
       <i className={`transaction-direction-line ${t.kind==="transfer"?"transfer":t.amount>=0?"income":"expense"}`} aria-hidden="true"/>
@@ -1075,7 +1075,7 @@ function ReportSection() {
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.7.1</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Gerarchia visiva dei contenitori e percorsi completi dei sottoconti nei trasferimenti.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.7.3</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Interfaccia più reattiva, nuovo indicatore da contabilizzare e categoria automatica degli interessi maturati.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1421,7 +1421,8 @@ export default function Home() {
         },0)+generated;
         const interest=Math.round(Math.max(0,balanceAtDate)*account.annualInterestRate/100/365*100)/100;
         if(interest>0){
-          const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:activeUser.id,kind:"income",account_id:account.id,amount:interest,transaction_date:date,confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:"Interesse giornaliero automatico"});
+          const interestCategory=data.categories.find(category=>category.kind==="income"&&category.name.toLocaleLowerCase("it-IT")==="interessi maturati");
+          const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:activeUser.id,kind:"income",account_id:account.id,category_id:interestCategory?.id??null,amount:interest,transaction_date:date,confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:"Interesse giornaliero automatico"});
           if(!error){generated+=interest;changed=true}else if(error.code!=="23505")throw error;
         }
         cursor.setDate(cursor.getDate()+1);
@@ -1533,11 +1534,13 @@ export default function Home() {
       accounted_at: transaction.accounted ? new Date().toISOString() : null,
       notes: transaction.notes?.trim() || null,
     };
+    const optimisticTransaction:Transaction={...transaction,accountId:account.id,categoryId:category?.id??null,dateISO:transaction.dateISO??toIsoDate(new Date()),date:formatItalianDate(transaction.dateISO??toIsoDate(new Date())),confirmedAt:transaction.planned?null:new Date().toISOString(),dueDate:transaction.planned?(transaction.dateISO??toIsoDate(new Date())):null,accounted:Boolean(transaction.accounted)};
+    setTransactions(current=>modal?.editing?current.map(item=>item.id===transaction.id?optimisticTransaction:item):[optimisticTransaction,...current]);
+    setModal(null);
     const result = modal?.editing
       ? await supabase.from("transactions").update(payload).eq("id", transaction.id)
       : await supabase.from("transactions").insert(payload);
-    if (result.error) { setDataError(result.error.message); return; }
-    setModal(null);
+    if (result.error) { setDataError(result.error.message); await refreshData(user); return; }
     await refreshData(user);
   };
   const moveAccount = async(accountId:string,direction:-1|1) => {
@@ -1598,9 +1601,11 @@ export default function Home() {
   };
   const accountTransaction = async () => {
     if(!selectedTransaction) return;
-    const { error } = await getSupabaseBrowserClient().from("transactions").update({ accounted_at: new Date().toISOString() }).eq("id", selectedTransaction.id);
-    if (error) { setDataError(error.message); return; }
+    const transactionId=selectedTransaction.id;
+    setTransactions(current=>current.map(item=>item.id===transactionId?{...item,accounted:true}:item));
     setSelectedTransaction(null);
+    const { error } = await getSupabaseBrowserClient().from("transactions").update({ accounted_at: new Date().toISOString() }).eq("id", selectedTransaction.id);
+    if (error) { setDataError(error.message); await refreshData(); return; }
     await refreshData();
   };
   const beginRefund = () => {
@@ -1709,6 +1714,10 @@ export default function Home() {
     if(confirmingRecurrences.current.has(confirmationKey)) return;
     confirmingRecurrences.current.add(confirmationKey);
     setDataError("");
+    const optimisticNextDate=nextRecurrenceDate(recurrence);
+    const optimisticCount=recurrence.occurrenceCount+1;
+    setRecurrences(current=>current.map(item=>item.id===recurrence.id?{...item,nextDate:optimisticNextDate,occurrenceCount:optimisticCount}:item));
+    setTransactions(current=>[{...transaction,id:transaction.recurrencePlaceholder?`optimistic:${confirmationKey}`:transaction.id,confirmedAt:new Date().toISOString(),accounted:recurrence.automaticAccounting,dueDate:recurrence.nextDate,recurrencePlaceholder:false},...current.filter(item=>item.id!==transaction.id)]);
     try {
       const {data:existing,error:lookupError}=await supabase.from("transactions")
         .select("id")
@@ -1758,6 +1767,7 @@ export default function Home() {
       await refreshData(user);
     } catch(error) {
       setDataError(error instanceof Error?error.message:"Impossibile confermare la transazione pianificata.");
+      await refreshData(user);
     } finally {
       confirmingRecurrences.current.delete(confirmationKey);
     }
