@@ -1,5 +1,15 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.2
+
+- Aggiunta la gestione dei modelli di entrata e uscita nelle Impostazioni.
+- Aggiunto il pulsante a stella nel modulo delle transazioni per richiamare i modelli.
+- La scelta di un modello compila automaticamente valore, categoria, conto e note.
+- È possibile salvare i dati correnti come nuovo modello direttamente durante l’inserimento.
+- Il pannello categorie ora è più piccolo e sovrapposto, così il modulo sottostante rimane visibile.
+- Corretti gli ingombri dei testi nei Conti e ridotto il valore centrale del grafico mensile in Dashboard.
+- Aumentata la leggibilità dei valori nella sezione Bilancio.
+
 ## Aggiornamento v4.1
 
 - Esteso il bordo colorato delle categorie a transazioni, pianificate, abbonamenti e movimenti dei conti.

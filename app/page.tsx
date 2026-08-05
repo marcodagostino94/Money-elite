@@ -66,8 +66,31 @@ type DashboardPreferences = {
   accountIds: string[];
 };
 
+type TransactionTemplate = {
+  id: string;
+  name: string;
+  kind: "income" | "expense";
+  amount: number;
+  category: string;
+  account: string;
+  notes: string;
+};
+
 const DASHBOARD_PREFERENCES_KEY = "money-elite-dashboard-preferences-v1";
 const ACCOUNT_ORDER_KEY = "money-elite-account-order-v1";
+const TRANSACTION_TEMPLATES_KEY = "money-elite-transaction-templates-v1";
+
+const loadTransactionTemplates = (): TransactionTemplate[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const value = JSON.parse(window.localStorage.getItem(TRANSACTION_TEMPLATES_KEY) || "[]");
+    return Array.isArray(value) ? value : [];
+  } catch { return []; }
+};
+const saveTransactionTemplates = (templates: TransactionTemplate[]) => {
+  window.localStorage.setItem(TRANSACTION_TEMPLATES_KEY, JSON.stringify(templates));
+  window.dispatchEvent(new Event("money-elite-templates-changed"));
+};
 
 const sortAccountsBySavedOrder = (accounts: MoneyAccount[]) => {
   if (typeof window === "undefined") return accounts;
@@ -248,6 +271,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,logout:L.LogOut,
   pause:L.Pause,play:L.Play,copy:L.Copy,info:L.Info,cigarette:L.Cigarette,drink:L.Martini,perfume:L.SprayCan,
   betting:L.Dices,justice:L.Scale,garage:L.Warehouse,
+  star:L.Star,
   eye:L.Eye,eyeOff:L.EyeOff,check:L.Check,down:L.ChevronDown,up:L.ChevronUp,clock:L.Clock3,stethoscope:L.Stethoscope,
 };
 
@@ -314,6 +338,12 @@ const categoryVisual = (category: Pick<MoneyCategory, "name" | "icon" | "color">
   canonicalCategoryNames.has(category.name)
     ? { icon: categoryIcon(category.name), color: categoryColor(category.name) }
     : { icon: category.icon || "circle", color: category.color || "#678098" };
+
+const categoryVisualByName = (value:string,categories:MoneyCategory[]) => {
+  const leaf=value.split("›").at(-1)?.trim()||value;
+  const category=categories.find(item=>item.name===leaf);
+  return category ? categoryVisual(category) : {icon:categoryIcon(leaf),color:categoryColor(leaf)};
+};
 
 const mealVoucherLeaf = (value: string) => value.split("›").at(-1)?.trim().toLocaleLowerCase("it") === "buoni pasto";
 
@@ -667,7 +697,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
   if (section === "Report") return <ReportSection />;
   if (section === "Informazioni") return <InformationSection />;
-  if (section === "Impostazioni") return <SettingsSection accounts={accounts} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
+  if (section === "Impostazioni") return <SettingsSection accounts={accounts} categories={categories} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} transactions={transactions} openTransaction={openTransaction} />;
   if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence} onDuplicate={duplicateRecurrence}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
@@ -915,7 +945,7 @@ function ReportSection() {
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.1</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.1 estende i bordi colorati e rende più compatti transazioni e movimenti dei conti.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.2</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.2 introduce i modelli di transazione e migliora la leggibilità su iPhone.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -972,7 +1002,18 @@ function CategoryManagement() {
   </article>;
 }
 
-function SettingsSection({ accounts, dashboardAccountIds, onChangeDashboardAccounts }: { accounts: MoneyAccount[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids: string[]) => void }) {
+function TemplateManagement({ accounts, categories }: { accounts: MoneyAccount[]; categories: MoneyCategory[] }) {
+  const [templates,setTemplates]=useState<TransactionTemplate[]>([]);
+  const [editing,setEditing]=useState<TransactionTemplate|null>(null);
+  useEffect(()=>setTemplates(loadTransactionTemplates()),[]);
+  const persist=(next:TransactionTemplate[])=>{setTemplates(next);saveTransactionTemplates(next)};
+  const create=()=>setEditing({id:crypto.randomUUID(),name:"",kind:"expense",amount:0,category:"",account:accounts.find(a=>!a.archived)?.name||"",notes:""});
+  const roots=categories.filter(category=>!category.parentId);
+  const categoryOptions=roots.flatMap(root=>[root.name,...categories.filter(child=>child.parentId===root.id).map(child=>`${root.name} › ${child.name}`)]);
+  return <article className="panel settings-card template-management"><div className="template-heading"><div><h3>Modelli di transazione</h3><p>Salva le operazioni frequenti per compilare automaticamente entrate e uscite.</p></div><button className="primary compact" onClick={create}><AppIcon name="plus" size={16}/> Modello</button></div><div className="template-settings-list">{templates.map(template=><div key={template.id}><span className={`template-star ${template.kind}`}><AppIcon name="star" size={17}/></span><div><b>{template.name}</b><small>{template.category} · {template.account}</small></div><strong className={template.kind==="income"?"positive":""}>{template.kind==="income"?"+":"−"}{money(template.amount)}</strong><button onClick={()=>setEditing(template)} aria-label="Modifica modello"><AppIcon name="edit" size={16}/></button><button className="danger" onClick={()=>persist(templates.filter(item=>item.id!==template.id))} aria-label="Elimina modello"><AppIcon name="trash" size={16}/></button></div>)}{!templates.length&&<div className="empty">Nessun modello salvato.</div>}</div>{editing&&<div className="modal-backdrop" onMouseDown={()=>setEditing(null)}><div className="modal template-editor" onMouseDown={event=>event.stopPropagation()}><div className="modal-title"><div><small>MODELLI</small><h2>{templates.some(item=>item.id===editing.id)?"Modifica modello":"Nuovo modello"}</h2></div><button onClick={()=>setEditing(null)}><AppIcon name="close"/></button></div><label>Nome<input autoFocus value={editing.name} onChange={event=>setEditing({...editing,name:event.target.value})} placeholder="Es. Carburante"/></label><label>Tipo<select value={editing.kind} onChange={event=>setEditing({...editing,kind:event.target.value as TransactionTemplate["kind"]})}><option value="expense">Uscita</option><option value="income">Entrata</option></select></label><label>Valore<input type="text" inputMode="decimal" value={amountInput(editing.amount)} onChange={event=>setEditing({...editing,amount:Math.abs(parseItalianAmount(event.target.value))})}/></label><label>Categoria<select value={editing.category} onChange={event=>setEditing({...editing,category:event.target.value})}><option value="">Seleziona categoria</option>{categoryOptions.map(value=><option key={value}>{value}</option>)}</select></label><label>Conto<select value={editing.account} onChange={event=>setEditing({...editing,account:event.target.value})}>{accounts.filter(account=>!account.archived).map(account=><option key={account.id}>{account.name}</option>)}</select></label><label>Note<input value={editing.notes} onChange={event=>setEditing({...editing,notes:event.target.value})} placeholder="Opzionale"/></label><div className="modal-actions"><button className="cancel" onClick={()=>setEditing(null)}>Annulla</button><button className="save-action transfer" disabled={!editing.name.trim()||!editing.category||editing.amount<=0} onClick={()=>{persist([...templates.filter(item=>item.id!==editing.id),editing]);setEditing(null)}}>Salva modello</button></div></div></div>}</article>;
+}
+
+function SettingsSection({ accounts, categories, dashboardAccountIds, onChangeDashboardAccounts }: { accounts: MoneyAccount[]; categories: MoneyCategory[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids: string[]) => void }) {
   const selectableAccounts = accounts.filter(account=>!account.archived&&!account.hidden);
   const toggleDashboardAccount = (accountId:string) => {
     const next = dashboardAccountIds.includes(accountId)
@@ -1003,6 +1044,7 @@ function SettingsSection({ accounts, dashboardAccountIds, onChangeDashboardAccou
         </div>
       </article>
 
+      <TemplateManagement accounts={accounts} categories={categories}/>
       <CategoryManagement />
       <article className="panel settings-card"><h3>Dati e sicurezza</h3><p className="setting-note">La struttura è predisposta per Supabase. Configura le variabili del progetto per attivare sincronizzazione, backup e accesso protetto.</p><button className="outline">Esporta tutti i dati</button></article>
     </section>
@@ -1032,6 +1074,10 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [subscription, setSubscription] = useState(initial?.subscription ?? (preset === "subscription"));
   const [autoAccounted, setAutoAccounted] = useState(initial?.automaticAccounting ?? true);
   const [categoryOpen, setCategoryOpen] = useState(!initial && !refundSource && kind !== "transfer");
+  const [templateOpen,setTemplateOpen]=useState(false);
+  const [templates,setTemplates]=useState<TransactionTemplate[]>([]);
+  const [amountValue,setAmountValue]=useState(initial?amountInput(Math.abs(initial.amount)):"");
+  const [notesValue,setNotesValue]=useState(initial?.notes ?? "");
   const [categoryQuery, setCategoryQuery] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
@@ -1046,6 +1092,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [frequency, setFrequency] = useState<Transaction["frequency"]>(initial?.frequency ?? "monthly");
   const [intervalCount, setIntervalCount] = useState(initial?.intervalCount ?? 1);
   const [occurrenceLimit, setOccurrenceLimit] = useState(initial?.occurrenceLimit ?? 0);
+  useEffect(()=>{const refreshTemplates=()=>setTemplates(loadTransactionTemplates());refreshTemplates();window.addEventListener("money-elite-templates-changed",refreshTemplates);return()=>window.removeEventListener("money-elite-templates-changed",refreshTemplates)},[]);
   const isTransfer = kind === "transfer";
   const selectedCard = cards.find(card => card.id === selectedCardId);
   const isMealVoucher = mealVoucherLeaf(selectedCategory);
@@ -1069,7 +1116,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       alert("Inserisci il numero dei buoni pasto.");
       return;
     }
-    const notes = String(fd.get("notes") ?? "").trim();
+    const notes = notesValue.trim();
     const category = isTransfer ? "Trasferimento tra conti" : selectedCategory;
     const categoryTitle = selectedCategory.split("›").at(-1)?.trim() || selectedCategory;
     void add({ id: editing && initial ? initial.id : crypto.randomUUID(), label: isTransfer ? "Giroconto" : `${categoryTitle}${refundSource ? " (Rimborso)" : ""}`, category, account: isTransfer ? from : selectedAccount, notes, cardId: isTransfer ? null : selectedCardId, destinationAccountId: isTransfer ? to : null, destinationAccountName: isTransfer ? to : null, date: formatItalianDate(selectedDateISO), dateISO: selectedDateISO, amount: kind === "expense" ? -Math.abs(raw) : Math.abs(raw), icon: refundSource ? "refund" : isTransfer ? "transfer" : kind === "expense" ? "expense" : "income", color: refundSource ? "green" : isTransfer ? "blue" : kind === "expense" ? "orange" : "green", accounted: planned ? false : accounted, isRefund: Boolean(refundSource), refundOf: refundSource?.id, kind: isTransfer ? "transfer" : refundSource ? "refund" : kind, voucherCount: isMealVoucher ? validVoucherCount : null, planned, subscription, automaticAccounting: autoAccounted, frequency, intervalCount, occurrenceLimit: occurrenceLimit > 0 ? occurrenceLimit : null });
@@ -1083,13 +1130,13 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       <label>Numero di buoni<input name="voucherCount" type="text" inputMode="numeric" value={voucherCount} onChange={e=>setVoucherCount(e.target.value.replace(/\D/g,""))} required/></label>
       <input name="amount" type="hidden" value={validVoucherCount*voucherValue}/>
       <div className="voucher-calculation"><span>{voucherCount || "0"} × {money(voucherValue)}</span><strong>{money(validVoucherCount*voucherValue)}</strong></div>
-    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" defaultValue={initial?amountInput(Math.abs(initial.amount)):undefined}/></div></label>}
+    </div> : <label>Valore<div className="amount-input"><span>€</span><input name="amount" type="text" inputMode="decimal" required placeholder="0,00" value={amountValue} onChange={event=>setAmountValue(event.target.value)}/></div></label>}
     {isTransfer ? <div className="transfer-fields">
       <label>Da<select value={from} onChange={e=>{setFrom(e.target.value);if(e.target.value===to)setTo(usableAccounts.find(account=>account.name!==e.target.value)?.name||"")}}>{usableAccounts.map(account=><option key={account.id}>{account.name}</option>)}</select><small>Disponibile: {money(usableAccounts.find(account=>account.name===from)?.balance||0)}</small></label>
       <div className="transfer-arrow">↓</div>
       <label>A<select value={to} onChange={e=>setTo(e.target.value)}>{usableAccounts.map(account=><option key={account.id} disabled={account.name===from}>{account.name}</option>)}</select><small>Saldo: {money(usableAccounts.find(account=>account.name===to)?.balance||0)}</small></label>
     </div> : <>
-      <label>Categoria e sottocategoria<button type="button" className="category-select" onClick={()=>setCategoryOpen(true)}><span>⌘</span><b>{refundSource?`Rimborso · ${selectedCategory}`:selectedCategory}</b><i>⌄</i></button></label>
+      <label>Categoria e sottocategoria<div className="category-template-row"><button type="button" className="category-select" onClick={()=>setCategoryOpen(true)}><span>⌘</span><b>{refundSource?`Rimborso · ${selectedCategory}`:selectedCategory}</b><i>⌄</i></button>{!refundSource&&<button type="button" className="template-trigger" onClick={()=>setTemplateOpen(true)} aria-label="Apri modelli" title="Modelli"><AppIcon name="star" size={19}/></button>}</div></label>
       <label>Conto<button type="button" className="category-select account-select" disabled={isMealVoucher} onClick={()=>setAccountOpen(true)}><span><AppIcon name="accounts" size={16}/></span><b>{selectedCard?.name || selectedAccount || "Seleziona conto"}</b><i>⌄</i></button>{isMealVoucher&&<small className="auto-account-note">{mealVoucherAccount?.name || "Buoni pasto"} selezionato automaticamente</small>}</label>
     </>}
     <label>Data<button type="button" className="date-wheel-trigger" onClick={()=>setDateOpen(true)}><span>◫</span><b>{formatItalianDate(selectedDateISO)}</b><i>›</i></button></label>
@@ -1103,7 +1150,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
       {kind==="expense" && preset!=="subscription" && <div className="modal-toggle"><div><b>È un abbonamento?</b><span>Mostralo nella pagina Abbonamenti</span></div><button type="button" className={subscription?"on":""} onClick={()=>setSubscription(x=>!x)}><i/></button></div>}
       <label>Promemoria<select defaultValue="Nessun promemoria"><option>Nessun promemoria</option><option>Il giorno prima</option><option>3 giorni prima</option><option>7 giorni prima</option></select></label>
     </div>}
-    {!isTransfer&&<label>Note<textarea name="notes" rows={3} defaultValue={initial?.notes ?? ""} placeholder="Aggiungi una nota (opzionale)"/></label>}
+    {!isTransfer&&<label>Note<textarea name="notes" rows={3} value={notesValue} onChange={event=>setNotesValue(event.target.value)} placeholder="Aggiungi una nota (opzionale)"/></label>}
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className={`save-action ${kind}`}>{refundSource?"Salva rimborso":labels.save}</button></div>
     {categoryOpen && <div className="category-picker">
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><button type="button" onClick={()=>setCategoryOpen(false)}>×</button></div>
@@ -1113,6 +1160,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
         {!visibleCategoryGroups.length&&<div className="empty">Nessuna categoria trovata.</div>}
       </div>
     </div>}
+    {templateOpen&&<div className="template-picker-layer" onMouseDown={()=>setTemplateOpen(false)}><div className="template-picker-card" onMouseDown={event=>event.stopPropagation()}><div className="template-picker-title"><div><small>COMPILAZIONE AUTOMATICA</small><h3>Seleziona un modello</h3></div><button type="button" onClick={()=>setTemplateOpen(false)}><AppIcon name="close"/></button></div><div className="template-picker-list">{templates.filter(template=>template.kind===kind).map(template=>{const visual=categoryVisualByName(template.category,categories);return <button type="button" key={template.id} onClick={()=>{setAmountValue(amountInput(template.amount));setSelectedCategory(template.category);setSelectedAccount(template.account);setSelectedCardId(null);setNotesValue(template.notes);setTemplateOpen(false);setCategoryOpen(false)}}><span style={{color:visual.color,background:`${visual.color}18`}}><AppIcon name={visual.icon} size={18}/></span><div><b>{template.name}</b><small>{template.category} · {template.account}</small></div><strong>{money(template.amount)}</strong></button>})}{!templates.some(template=>template.kind===kind)&&<div className="empty">Nessun modello per questa operazione.</div>}</div><button type="button" className="new-template-from-transaction" onClick={()=>{const name=window.prompt("Nome del nuovo modello");if(!name?.trim())return;const amount=Math.abs(parseItalianAmount(amountValue));if(!amount){alert("Inserisci prima il valore della transazione.");return;}const next=[...templates,{id:crypto.randomUUID(),name:name.trim(),kind:kind as "income"|"expense",amount,category:selectedCategory,account:selectedAccount,notes:notesValue}];setTemplates(next);saveTransactionTemplates(next);setTemplateOpen(false)}}><AppIcon name="plus" size={16}/> Salva i dati attuali come nuovo modello</button></div></div>}
     {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setSelectedCardId(null);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}{cards.filter(card=>!card.archived).map(card=>{const linked=usableAccounts.find(account=>account.id===card.linkedAccountId);return <button type="button" key={card.id} onClick={()=>{setSelectedAccount(linked?.name||"");setSelectedCardId(card.id);setAccountOpen(false)}}><span><AppIcon name="card" size={18}/></span><b>{card.name}</b><strong>Carta di credito</strong></button>})}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
     {dateOpen && <div className="date-picker-layer"><div className="date-picker-card"><h3>Seleziona data</h3><input className="native-date-input" type="date" value={selectedDateISO} onChange={event=>setSelectedDateISO(event.target.value)}/><div className="date-picker-actions"><button type="button" onClick={()=>setDateOpen(false)}>Annulla</button><button type="button" onClick={()=>setDateOpen(false)}>Conferma</button></div></div></div>}
   </form></div>

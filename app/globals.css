@@ -523,3 +523,51 @@ header h1{font-size:25px!important}
   .transaction-info span{font-size:11px!important}
   .transaction-amount b{font-size:16px!important}
 }
+
+/* v4.2 — tipografia responsiva e modelli di transazione */
+.account-row>div:nth-child(2){min-width:0;overflow:hidden}
+.account-row h3,.account-row>div:nth-child(2)>strong{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dashboard-balance-donut strong{font-size:13px!important;line-height:1.1;max-width:66px;overflow-wrap:anywhere}
+.history-values{font-size:13px;gap:9px}
+.history-values span{align-items:center;gap:12px}
+.history-values b,.history-values strong{font-size:14px}
+.history-row h3{font-size:17px}
+.history-row>div:nth-child(2) span{font-size:12px}
+.category-template-row{display:grid;grid-template-columns:minmax(0,1fr) 43px;gap:8px;align-items:end}
+.category-template-row .category-select{min-width:0}
+.template-trigger{height:42px;border:1px solid #dfd9cf;border-radius:10px;background:#fff;color:#d19b25;display:grid;place-items:center}
+.template-trigger:hover{background:#fff8e7;border-color:#d19b25}
+.template-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:14px}
+.template-heading h3{margin:0 0 5px}.template-heading p{margin:0;color:#85878d;font-size:13px}
+.template-settings-list{display:grid}
+.template-settings-list>div{display:grid;grid-template-columns:38px minmax(0,1fr) auto 36px 36px;gap:10px;align-items:center;min-height:58px;border-top:1px solid var(--line)}
+.template-settings-list>div:first-child{border-top:0}
+.template-settings-list b,.template-settings-list small{display:block}.template-settings-list small{margin-top:3px;color:#8c8e94;font-size:11px}
+.template-settings-list strong{font-size:14px}.template-settings-list button{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff}
+.template-star{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#fff4d8;color:#c8921d;box-shadow:inset 0 0 0 1.5px currentColor}
+.template-star.income{background:#e8f4ee;color:#3f9870}
+.template-picker-layer{position:absolute;inset:0;background:#27282c66;z-index:8;display:grid;place-items:center;padding:18px}
+.template-picker-card{width:min(440px,100%);max-height:70vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 18px 55px #0004;padding:18px}
+.template-picker-title{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.template-picker-title small{font-size:10px;color:#bb861e}.template-picker-title h3{margin:4px 0 0;font-size:19px}.template-picker-title>button{border:0;background:none}
+.template-picker-list>button{width:100%;display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:11px;align-items:center;border:0;border-bottom:1px solid var(--line);background:#fff;padding:11px 2px;text-align:left}
+.template-picker-list>button>span{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 1.5px currentColor}
+.template-picker-list b,.template-picker-list small{display:block}.template-picker-list small{font-size:11px;color:#8e9095;margin-top:3px}.template-picker-list strong{font-size:13px}
+.new-template-from-transaction{width:100%;margin-top:12px;padding:11px;border:1px dashed #d4aa51;border-radius:10px;background:#fffaf0;color:#9a6c11;display:flex;justify-content:center;align-items:center;gap:7px;font-weight:650}
+.category-picker{inset:76px 14px auto!important;max-height:66%;min-height:0!important;border:1px solid var(--line);border-radius:15px;box-shadow:0 18px 50px #0003;padding:16px!important}
+.category-picker-title h3{font-size:18px!important;margin-bottom:10px}.category-search{min-height:42px!important}.category-group>button{min-height:48px!important}.category-group>button span{width:34px!important;height:34px!important}.category-group>button b{font-size:14px!important}
+@media(max-width:620px){
+  .account-row{grid-template-columns:38px minmax(0,1fr) 32px 32px 32px!important;gap:6px!important;padding:9px 8px!important}
+  .account-row .item-icon{width:36px!important;height:36px!important}
+  .account-row h3{font-size:14px!important}.account-row>div:nth-child(2)>strong{font-size:15px!important}
+  .dashboard-balance-donut strong{font-size:12px!important;max-width:58px}
+  .history-row{grid-template-columns:45px minmax(0,1fr);gap:10px;padding:13px!important}
+  .history-values{grid-column:1/-1;font-size:12px}.history-values b,.history-values strong{font-size:13px}
+  .category-picker{inset:70px 10px auto!important;max-height:62%;padding:13px!important}
+  .category-picker-title{margin-bottom:8px}.category-picker-title h3{font-size:16px!important}.category-search{margin-bottom:6px}
+  .category-group>button{min-height:43px!important;padding:6px 3px!important}.category-group>button span{width:31px!important;height:31px!important}.category-group>button b{font-size:13px!important}
+  .subcategory-list{padding-left:12px!important}.category-group .subcategory-choice{padding:6px 4px!important}.category-group .subcategory-choice .sub-symbol{width:30px;height:30px}
+  .template-heading{align-items:center}.template-heading p{font-size:11px}.template-heading .primary{font-size:0}.template-heading .primary svg{margin:0}
+  .template-settings-list>div{grid-template-columns:34px minmax(0,1fr) auto 32px 32px;gap:6px}.template-settings-list strong{font-size:12px}
+  .template-picker-layer{place-items:end center;padding:0}.template-picker-card{width:100%;max-height:72dvh;border-radius:18px 18px 0 0;padding:16px}
+}

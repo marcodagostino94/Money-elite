@@ -25,4 +25,4 @@ Lo schema completo si trova in `supabase/schema.sql`. Le migrazioni aggiuntive s
 
 ## Versione
 
-Money Elite 4.1.0 — 5 agosto 2026.
+Money Elite 4.2.0 — 5 agosto 2026.
