@@ -287,6 +287,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   betting:L.Dices,justice:L.Scale,garage:L.Warehouse,
   star:L.Star,
   eye:L.Eye,eyeOff:L.EyeOff,check:L.Check,down:L.ChevronDown,up:L.ChevronUp,clock:L.Clock3,stethoscope:L.Stethoscope,
+  list:L.List,
 };
 
 function AppIcon({name,size=18}: {name:string;size?:number}) {
@@ -510,6 +511,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const savings = visibleAccounts.filter(account=>account.type==="savings").reduce((sum,account)=>sum+account.balance/Math.max(account.exchangeRate||1,.00000001),0);
   const liquidity = visibleAccounts.filter(account=>account.type!=="savings").reduce((sum,account)=>sum+account.balance/Math.max(account.exchangeRate||1,.00000001),0);
   const wealth = liquidity+savings;
+  const foreignHoldings=Array.from(visibleAccounts.filter(account=>account.currency!==primaryCurrency&&account.balance>0).reduce((map,account)=>map.set(account.currency,(map.get(account.currency)||0)+account.balance),new Map<string,number>()).entries());
   const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,effectiveTransactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
   const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
@@ -598,6 +600,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
       <button className="balance-card dark heritage-link dashboard-wealth-card" onClick={()=>setActive("Conti")}>
         <div className="card-heading"><span>Patrimonio totale</span><AppIcon name="forward" size={18}/></div>
         <h2>{primaryMoney(wealth)}</h2>
+        {foreignHoldings.length>0&&<div className="foreign-holdings">{foreignHoldings.map(([currency,value])=><span key={currency}>di cui {accountMoney(value,currency)}</span>)}</div>}
         <div className="balance-breakdown">
           <div><small>LIQUIDITÀ</small><b>{primaryMoney(liquidity)}</b></div>
           <div><small>CARTA DI CREDITO</small><b className="card-debt">{primaryMoney(-cardDebt)}</b></div>
@@ -889,10 +892,9 @@ function BalanceHistorySection({ onAdd, transactions, accounts, primaryCurrency,
   const converted=(item:Transaction)=>Math.abs(item.amount)/Math.max(accounts.find(account=>account.id===item.accountId||account.name===item.account)?.exchangeRate||1,.00000001);
   const months=monthKeys.map(key=>{const rows=effective.filter(item=>dateInMonth(item.dateISO,key));const income=rows.filter(item=>item.kind==="income").reduce((sum,item)=>sum+converted(item),0);const expense=Math.max(0,rows.filter(item=>item.kind==="expense").reduce((sum,item)=>sum+converted(item),0)-rows.filter(item=>item.kind==="refund"||item.isRefund).reduce((sum,item)=>sum+converted(item),0));return {key,label:monthLabel(key),income,expense};});
   const selectedRows=selectedMonth?effective.filter(item=>dateInMonth(item.dateISO,selectedMonth)):[];
-  const convertedSelectedRows=selectedRows.map(item=>({...item,amount:(item.amount<0?-1:1)*converted(item),currency:primaryCurrency}));
   if (selectedMonth && detail) {
     const transactionPage = detail === "transactions" || detail === "incomeTransactions" || detail === "expenseTransactions";
-    return <section className="section-page balance-page"><div className="inner-page-header"><button onClick={()=>setDetail(null)}>←</button><div><small>BILANCIO</small><h2>{detail==="transactions"?"Transazioni":detail==="incomeTransactions"?"Entrate del mese":detail==="expenseTransactions"?"Uscite del mese":detail==="income"?"Entrate":"Uscite"}</h2><p>{monthLabel(selectedMonth)} · {primaryCurrency}</p></div></div>{transactionPage?<BalanceTransactionPage filter={detail} transactions={selectedRows} openTransaction={openTransaction}/>:<><BalanceMonthDetail detail={detail} transactions={convertedSelectedRows}/><button className="view-month-transactions" onClick={()=>setDetail(detail==="income"?"incomeTransactions":"expenseTransactions")}>Vedi tutte le {detail==="income"?"entrate":"uscite"} del mese →</button></>}<QuickActions allowTransfer={false} openAction={onAdd}/></section>;
+    return <section className="section-page balance-page"><div className="inner-page-header"><button onClick={()=>setDetail(null)}>←</button><div><small>BILANCIO</small><h2>{detail==="transactions"?"Transazioni":detail==="incomeTransactions"?"Entrate del mese":detail==="expenseTransactions"?"Uscite del mese":detail==="income"?"Entrate":"Uscite"}</h2><p>{monthLabel(selectedMonth)} · {primaryCurrency}</p></div></div>{transactionPage?<BalanceTransactionPage filter={detail} transactions={selectedRows} openTransaction={openTransaction}/>:<InteractiveCategoryBalance detail={detail} transactions={selectedRows} accounts={accounts} primaryCurrency={primaryCurrency} openTransaction={openTransaction}/>}<QuickActions allowTransfer={false} openAction={onAdd}/></section>;
   }
   return <section className="section-page"><div className="section-toolbar"><button className="outline">↓ Esporta bilancio</button></div>
     <div className="history-list">{months.map(({key,label,income,expense})=>{const total=income-expense;const share=income+expense>0?Math.round(income/(income+expense)*100):50;return <button className="history-row" key={key} onClick={()=>setSelectedMonth(key)}><div className="mini-donut" style={{background:`conic-gradient(#559476 0 ${share}%,#c96360 ${share}% 100%)`}}/><div><h3>{label}</h3><span>Apri dettagli del mese →</span></div><div className="history-values"><span>Entrate <b className="positive">+ {accountMoney(income,primaryCurrency)}</b></span><span>Uscite <b>− {accountMoney(expense,primaryCurrency)}</b></span><strong className={total>=0?"positive":""}>Totale {total>=0?"+ ":"− "}{accountMoney(Math.abs(total),primaryCurrency)}</strong></div></button>})}</div>
@@ -914,6 +916,27 @@ function BalanceMonthDetail({ detail, transactions }: { detail: "income" | "expe
   const rows=Array.from(grouped.entries()).filter(([,value])=>value>0).sort((a,b)=>b[1]-a[1]);
   const total=income?relevant.reduce((sum,item)=>sum+Math.abs(item.amount),0):netExpenses(relevant);
   return <div className="category-detail"><div className={`large-donut ${income?"income":"expense"}`}><div><strong>{money(total)}</strong><span>{income?"Entrate":"Uscite nette"}</span></div></div>{rows.map(([name,value],i)=><div className="legend-row" key={name}><i className={`legend-c${i%4}`}/><b>{name}</b><span>{total>0?`${Math.round(value/total*100)}%`:"0%"}</span><strong>{money(value)}</strong></div>)}{!rows.length&&<div className="empty">Nessun movimento nel mese selezionato.</div>}</div>
+}
+
+function InteractiveCategoryBalance({detail,transactions,accounts,primaryCurrency,openTransaction}:{detail:"income"|"expense";transactions:Transaction[];accounts:MoneyAccount[];primaryCurrency:string;openTransaction:(transaction:Transaction)=>void}){
+  const [level,setLevel]=useState<"root"|"child">("root");
+  const [selectedRoot,setSelectedRoot]=useState<string|null>(null);
+  const [selectedSlice,setSelectedSlice]=useState<string|null>(null);
+  const [listMode,setListMode]=useState(false);
+  const relevant=transactions.filter(item=>detail==="income"?item.kind==="income":item.kind==="expense"||item.kind==="refund");
+  const converted=(item:Transaction)=>Math.abs(item.amount)/Math.max(accounts.find(account=>account.id===item.accountId||account.name===item.account)?.exchangeRate||1,.00000001);
+  const rootName=(item:Transaction)=>item.category.replace(/^Rimborso\s*[·:-]?\s*/i,"").split("›")[0]?.trim()||"Senza categoria";
+  const childName=(item:Transaction)=>item.category.replace(/^Rimborso\s*[·:-]?\s*/i,"").split("›").at(-1)?.trim()||"Senza sottocategoria";
+  const value=(item:Transaction)=>detail==="expense"&&(item.kind==="refund"||item.isRefund)?-converted(item):converted(item);
+  const scoped=level==="child"&&selectedRoot?relevant.filter(item=>rootName(item)===selectedRoot):relevant;
+  const grouped=new Map<string,number>();scoped.forEach(item=>{const name=level==="root"?rootName(item):childName(item);grouped.set(name,(grouped.get(name)||0)+value(item))});
+  const palette=["#ef5350","#1da7df","#4caf58","#ff9800","#f4d835","#8e63ce","#3b9b91","#d46f9d"];
+  const rows=Array.from(grouped.entries()).filter(([,amount])=>amount>0).sort((a,b)=>b[1]-a[1]).map(([name,amount],index)=>({name,amount,color:palette[index%palette.length]}));
+  const total=rows.reduce((sum,row)=>sum+row.amount,0);const circumference=2*Math.PI*42;let running=0;
+  const selected=selectedSlice?rows.find(row=>row.name===selectedSlice):null;
+  const listed=listMode?scoped.filter(item=>(level==="root"?rootName(item):childName(item))===selectedSlice):[];
+  if(listMode)return <div className="balance-drill-list"><div className="balance-drill-heading"><button onClick={()=>setListMode(false)}><AppIcon name="back"/></button><div><small>{level==="root"?"CATEGORIA":"SOTTOCATEGORIA"}</small><h3>{selectedSlice}</h3></div><strong>{accountMoney(selected?.amount||0,primaryCurrency)}</strong></div><article className="panel month-transactions">{listed.map(item=><TransactionRow key={item.id} t={item} onOpen={openTransaction}/>)}{!listed.length&&<div className="empty">Nessuna transazione.</div>}</article></div>;
+  return <div className="interactive-category-balance"><div className="balance-drill-heading">{level==="child"&&<button onClick={()=>{setLevel("root");setSelectedSlice(selectedRoot);setSelectedRoot(null)}}><AppIcon name="back"/></button>}<div><small>{detail==="income"?"GUADAGNI":"SPESE"}</small><h3>{level==="root"?"Categorie principali":selectedRoot}</h3></div><strong>{accountMoney(total,primaryCurrency)}</strong></div><div className="interactive-donut-card"><svg viewBox="0 0 100 100" className="interactive-donut" aria-label="Grafico categorie"><circle cx="50" cy="50" r="42" fill="none" stroke="#ecebea" strokeWidth="14"/>{rows.map(row=>{const portion=total?row.amount/total:0;const offset=running;running+=portion;return <circle key={row.name} cx="50" cy="50" r="42" fill="none" stroke={row.color} strokeWidth={selectedSlice===row.name?18:14} strokeDasharray={`${portion*circumference} ${circumference}`} strokeDashoffset={-offset*circumference} transform="rotate(-90 50 50)" onClick={()=>setSelectedSlice(row.name)} className="donut-segment"/>})}</svg><div className="donut-center">{selected?<><b>{selected.name}</b><strong>{accountMoney(selected.amount,primaryCurrency)}</strong></>:<><b>Totale</b><strong>{accountMoney(total,primaryCurrency)}</strong></>}</div>{selected&&<div className="donut-actions">{level==="root"&&<button title="Apri sottocategorie" onClick={()=>{setSelectedRoot(selected.name);setLevel("child");setSelectedSlice(null)}}><AppIcon name="search"/></button>}<button title="Mostra transazioni" onClick={()=>setListMode(true)}><AppIcon name="list"/></button></div>}</div><div className="interactive-legend">{rows.map(row=><button key={row.name} className={selectedSlice===row.name?"selected":""} onClick={()=>setSelectedSlice(row.name)}><i style={{background:row.color}}/><b>{row.name}</b><span>{total?Math.round(row.amount/total*100):0}%</span><strong>{accountMoney(row.amount,primaryCurrency)}</strong></button>)}</div></div>;
 }
 
 function PlannedSection({recurrences,accounts,cards,categories,refresh,onEdit,onDuplicate}:{recurrences:MoneyRecurrence[];accounts:MoneyAccount[];cards:MoneyCard[];categories:MoneyCategory[];refresh:()=>Promise<void>;onEdit:(recurrence:MoneyRecurrence)=>void;onDuplicate:(recurrence:MoneyRecurrence)=>void}) {
@@ -972,7 +995,7 @@ function ReportSection() {
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.4</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.4 introduce il sistema multivaluta completo con tassi fissi e cambi storici dei trasferimenti.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.5</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.5 aggiunge Bilancio interattivo, ordine conti sincronizzato e Dashboard desktop compatta.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1301,7 +1324,7 @@ export default function Home() {
       // newer snapshot, otherwise balances can temporarily revert or jump.
       if (sequence !== refreshSequence.current) return;
 
-      const orderedAccounts=sortAccountsBySavedOrder(data.accounts);
+      const orderedAccounts=data.accounts;
       setAccounts(orderedAccounts);
       setPrimaryCurrency(data.primaryCurrency);window.localStorage.setItem(PRIMARY_CURRENCY_KEY,data.primaryCurrency);
       setCategories(data.categories);
@@ -1399,23 +1422,15 @@ export default function Home() {
     setModal(null);
     await refreshData(user);
   };
-  const moveAccount = (accountId:string,direction:-1|1) => {
-    setAccounts(current=>{
-      const active=current.filter(account=>!account.archived);
-      const index=active.findIndex(account=>account.id===accountId);
-      const target=index+direction;
-      if(index<0||target<0||target>=active.length)return current;
-      [active[index],active[target]]=[active[target],active[index]];
-      const activeById=new Map(active.map((account,position)=>[account.id,position]));
-      const next=[...current].sort((a,b)=>{
-        if(a.archived&&b.archived)return 0;
-        if(a.archived)return 1;
-        if(b.archived)return -1;
-        return (activeById.get(a.id)??0)-(activeById.get(b.id)??0);
-      });
-      window.localStorage.setItem(ACCOUNT_ORDER_KEY,JSON.stringify(next.map(account=>account.id)));
-      return next;
-    });
+  const moveAccount = async(accountId:string,direction:-1|1) => {
+    const active=accounts.filter(account=>!account.archived);
+    const index=active.findIndex(account=>account.id===accountId);const target=index+direction;
+    if(index<0||target<0||target>=active.length)return;
+    [active[index],active[target]]=[active[target],active[index]];
+    setAccounts(current=>[...active,...current.filter(account=>account.archived)]);
+    const results=await Promise.all(active.map((account,position)=>getSupabaseBrowserClient().from("accounts").update({sort_order:position}).eq("id",account.id)));
+    const error=results.find(result=>result.error)?.error;if(error){setDataError(error.message);await refreshData(user);return;}
+    await refreshData(user);
   };
   const openRecurrenceEditor = (recurrence: MoneyRecurrence, duplicate = false) => {
     const category = categories.find(item => item.id === recurrence.categoryId);
@@ -1521,6 +1536,7 @@ export default function Home() {
       icon: draft.icon,
       currency: draft.currency,
       exchange_rate: draft.type === "meal_vouchers" ? 1 : draft.exchangeRate,
+      sort_order: account?.sortOrder ?? Math.max(-1,...accounts.map(item=>item.sortOrder||0))+1,
       color: draft.type === "meal_vouchers" ? "#7051bf" : "#4f9d82",
     };
     const result = account

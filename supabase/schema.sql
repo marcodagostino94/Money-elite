@@ -28,6 +28,7 @@ create table accounts (
   opening_balance numeric(14,2) not null default 0,
   currency text not null default 'EUR',
   exchange_rate numeric(20,8) not null default 1 check (exchange_rate > 0),
+  sort_order integer not null default 0,
   voucher_unit_value numeric(10,2),
   hidden_from_totals boolean not null default false,
   archived_at timestamptz,

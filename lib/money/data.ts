@@ -15,6 +15,7 @@ export type MoneyAccount = {
   notes: string;
   currency: string;
   exchangeRate: number;
+  sortOrder: number;
 };
 
 export type MoneyCategory = {
@@ -266,7 +267,7 @@ async function loadAllTransactions(supabase: SupabaseClient, userId: string) {
 export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
   await ensureInitialData(supabase, userId);
   const [{ data: rawAccounts, error: accountsError }, { data: rawCategories, error: categoriesError }, rawTransactions, { data: rawCards, error: cardsError }, { data: rawBudgets, error: budgetsError }, { data: rawRecurrences, error: recurrencesError }, {data:profile,error:profileError}] = await Promise.all([
-    supabase.from("accounts").select("*").order("name"),
+    supabase.from("accounts").select("*").order("sort_order").order("name"),
     supabase.from("categories").select("*").order("name"),
     loadAllTransactions(supabase, userId),
     supabase.from("cards").select("*").order("name"),
@@ -329,6 +330,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       notes: row.notes ?? "",
       currency: row.currency || "EUR",
       exchangeRate: Number(row.exchange_rate || 1),
+      sortOrder: Number(row.sort_order || 0),
     };
   });
 

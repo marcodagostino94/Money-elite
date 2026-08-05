@@ -124,6 +124,28 @@ input,textarea,select{font-size:16px}
 .transaction-amount small{display:block;color:#4c8c6e;font-size:10px;margin:2px 0}
 @media(max-width:620px){.exchange-rate-input{grid-template-columns:1fr}.exchange-rate-input input{text-align:left}.effective-exchange-rate{align-items:flex-start;flex-direction:column;gap:3px}}
 
+/* v4.5 — desktop compatto, patrimonio estero e Bilancio esplorabile */
+.foreign-holdings{display:flex;flex-wrap:wrap;gap:6px 12px;margin:-2px 0 12px;position:relative;z-index:2}
+.foreign-holdings span{font-size:12px;color:#d2c9e8;background:#ffffff12;border:1px solid #ffffff18;border-radius:999px;padding:5px 9px}
+.interactive-category-balance{display:grid;grid-template-columns:minmax(300px,1fr) minmax(300px,.8fr);gap:15px;align-items:start}
+.balance-drill-heading{grid-column:1/-1;display:flex;align-items:center;gap:11px;padding:4px 2px 8px}
+.balance-drill-heading>button{width:36px;height:36px;border:1px solid var(--line);border-radius:9px;background:#fff}.balance-drill-heading>div{flex:1}.balance-drill-heading small{font-size:10px;color:#7a5ac0}.balance-drill-heading h3{margin:2px 0 0;font-size:19px}.balance-drill-heading>strong{font-size:18px}
+.interactive-donut-card{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;min-height:360px;display:grid;place-items:center}
+.interactive-donut{width:min(100%,410px);overflow:visible}.donut-segment{cursor:pointer;transition:stroke-width .18s,opacity .18s}.donut-segment:hover{opacity:.86}
+.donut-center{position:absolute;inset:0;display:grid;place-content:center;text-align:center;pointer-events:none;padding:30%}.donut-center b,.donut-center strong{display:block}.donut-center b{font-size:14px}.donut-center strong{font-size:18px;margin-top:5px}
+.donut-actions{position:absolute;left:16px;right:16px;bottom:14px;display:flex;justify-content:space-between;pointer-events:none}.donut-actions button{pointer-events:auto;width:40px;height:40px;border:1px solid var(--line);border-radius:11px;background:#fff;box-shadow:0 4px 14px #0002;color:#5d6066}
+.interactive-legend{background:#fff;border:1px solid var(--line);border-radius:16px;padding:9px 14px}
+.interactive-legend button{width:100%;display:grid;grid-template-columns:22px minmax(0,1fr) 42px auto;align-items:center;gap:9px;min-height:47px;border:0;border-top:1px solid var(--line);background:#fff;text-align:left;padding:5px 7px;border-radius:8px}.interactive-legend button:first-child{border-top:0}.interactive-legend button.selected{background:#edf5fb}.interactive-legend i{width:20px;height:14px;border-radius:5px}.interactive-legend b{font-size:13px}.interactive-legend span{font-size:12px;color:#85878d;text-align:right}.interactive-legend strong{font-size:13px;text-align:right}
+.balance-drill-list .balance-drill-heading{display:flex}.balance-drill-list .month-transactions{padding:8px 18px}
+@media(min-width:901px){
+  header{height:86px;padding:16px 30px}header p{font-size:11px;margin-bottom:4px}header h1{font-size:23px!important}
+  .page-content{padding:22px 28px 76px}
+  .dashboard-overview-grid{gap:12px;margin-bottom:12px}.dashboard-month-balance,.dashboard-accounts-card{padding:16px 18px}.dashboard-balance-content{grid-template-columns:112px minmax(0,1fr);gap:14px}.dashboard-balance-donut{width:106px;height:106px}.dashboard-balance-donut:before{width:66px;height:66px}.dashboard-balance-lines>div{padding:8px 0}.dashboard-account-list>button{min-height:45px}.dashboard-account-icon{width:32px;height:32px}.dashboard-account-list b{font-size:13px!important}.dashboard-account-list strong{font-size:14px!important}
+  .dashboard-wealth-card{min-height:0!important;padding:18px 21px!important;margin-bottom:12px}.dashboard-wealth-card h2{font-size:31px!important;margin:10px 0 7px}.dashboard-wealth-card .balance-breakdown{margin-top:10px;padding-top:10px}.dashboard-wealth-card .balance-breakdown b{font-size:14px!important}
+  .dashboard-spending-chart{margin-bottom:12px}.dashboard-chart-title{padding:13px 17px 7px}.chart-tabs button{padding:10px 15px}.insight-chart{grid-template-columns:150px 1fr;padding:10px 18px 6px;min-height:0!important}.dashboard-wealth-chart .insight-chart{min-height:170px}.insight-chart .sparkline{height:118px}.dashboard-stack{gap:12px}.panel-title{margin-bottom:8px}
+}
+@media(max-width:700px){.interactive-category-balance{grid-template-columns:1fr}.interactive-donut-card{min-height:310px}.interactive-donut{max-width:330px}.interactive-legend{padding:7px}.interactive-legend button{grid-template-columns:18px minmax(0,1fr) 34px auto;gap:7px}.interactive-legend b{font-size:12px}.interactive-legend strong{font-size:12px}.balance-drill-heading h3{font-size:17px}}
+
 /* Il grafico resta sempre sopra il pulsante mobile e non viene tagliato su iPhone. */
 @media(max-width:620px){
   .insight-panel{position:relative;z-index:2;margin-bottom:78px}

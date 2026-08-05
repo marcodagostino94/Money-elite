@@ -1,5 +1,16 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.5
+
+- Compattata la Dashboard desktop riducendo spazi, altezze e margini inutilizzati.
+- L’ordine dei conti viene ora salvato in Supabase e sincronizzato tra Mac, iPhone e altri dispositivi.
+- Aggiunto il grafico interattivo del Bilancio per categorie principali.
+- Selezionando una categoria vengono mostrati valore, percentuale e azioni di approfondimento.
+- La lente apre il grafico delle relative sottocategorie.
+- Il pulsante elenco mostra tutte le transazioni della categoria o sottocategoria selezionata.
+- Aggiunto il riepilogo “di cui” delle valute estere positive nella card Patrimonio.
+- Aggiunta una migrazione non distruttiva per l’ordine sincronizzato dei conti.
+
 ## Aggiornamento v4.4
 
 - Implementato il sistema multivaluta reale concordato.

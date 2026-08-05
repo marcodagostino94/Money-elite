@@ -25,6 +25,8 @@ Lo schema completo si trova in `supabase/schema.sql`. Le migrazioni aggiuntive s
 
 ## Versione
 
-Money Elite 4.4.0 — 5 agosto 2026.
+Money Elite 4.5.0 — 5 agosto 2026.
 
 Per attivare il sistema multivaluta completo su un database esistente, eseguire nel SQL Editor di Supabase `supabase/migrations/20260805_multicurrency_complete.sql` una sola volta.
+
+Per sincronizzare l’ordine dei conti tra dispositivi, eseguire anche `supabase/migrations/20260805_account_order_sync.sql` una sola volta.
