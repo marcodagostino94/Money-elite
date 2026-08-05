@@ -324,25 +324,25 @@ function Sidebar({ active, setActive, email, signOut }: { active: Section; setAc
       <nav>
         <p className="nav-title">PANORAMICA</p>
         {nav.slice(0, 3).map((item) => (
-          <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
+          <button key={item.label} className={`${active === item.label ? "active" : ""} nav-${item.icon}`} onClick={() => setActive(item.label)}>
             <span><AppIcon name={item.icon}/></span>{item.label}
           </button>
         ))}
         <p className="nav-title menu-group">TRANSAZIONI PIANIFICATE</p>
         {nav.slice(3, 5).map((item) => (
-          <button key={item.label} className={`nested ${active === item.label ? "active" : ""}`} onClick={() => setActive(item.label)}>
+          <button key={item.label} className={`nested ${active === item.label ? "active" : ""} nav-${item.icon}`} onClick={() => setActive(item.label)}>
             <span><AppIcon name={item.icon}/></span>{item.label === "Pianificate" ? "Transazioni pianificate" : item.label}
           </button>
         ))}
         <p className="nav-title">GESTIONE</p>
-        {nav.slice(5, 9).map((item) => (
-          <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
-            <span><AppIcon name={item.icon}/></span>{item.label}{item.label === "Debiti" && <em>Opzionale</em>}
+        {nav.slice(5, 8).map((item) => (
+          <button key={item.label} className={`${active === item.label ? "active" : ""} nav-${item.icon}`} onClick={() => setActive(item.label)}>
+            <span><AppIcon name={item.icon}/></span>{item.label}
           </button>
         ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(9).map((item) => (
-          <button key={item.label} className={active === item.label ? "active" : ""} onClick={() => setActive(item.label)}>
+        {nav.slice(8).map((item) => (
+          <button key={item.label} className={`${active === item.label ? "active" : ""} nav-${item.icon}`} onClick={() => setActive(item.label)}>
             <span><AppIcon name={item.icon}/></span>{item.label}
           </button>
         ))}
@@ -423,11 +423,11 @@ function Header({ active }: { active: Section }) {
   );
 }
 
-function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) {
+function Sparkline({ mode = "wealth", weekData = [] }: { mode?: "wealth" | "week" | "month"; weekData?: { date: string; value: number }[] }) {
   if (mode === "week") {
-    const days = [["23/07",29.50,14],["24/07",24.50,12],["25/07",86.75,42],["26/07",86.85,42],["27/07",14.88,7],["28/07",207.88,100],["29/07",109.94,53]] as const;
+    const maximum=Math.max(1,...weekData.map(day=>day.value));
     return <div className="weekly-bars" aria-label="Spese degli ultimi sette giorni">
-      {days.map(([date,value,height])=><div className="week-bar" key={date}><b>{money(value)}</b><i style={{height:`${height}%`}}/><span>{date}</span></div>)}
+      {weekData.map(({date,value})=><div className="week-bar" key={date}><b>{money(value)}</b><i style={{height:`${value>0?Math.max(5,value/maximum*100):0}%`}}/><span>{date.slice(8,10)}/{date.slice(5,7)}</span></div>)}
     </div>;
   }
   const months = mode === "wealth" ? ["Ago","Ott","Dic","Feb","Apr","Giu","Lug"] : ["1","5","10","15","20","25","29"];
@@ -461,6 +461,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const cardDebt = cards.filter(card=>!card.archived).reduce((sum,card)=>sum+Math.max(0,effectiveTransactions.filter(t=>t.cardId===card.id).reduce((subtotal,t)=>subtotal+(t.kind==="card_repayment"?-Math.abs(t.amount):t.amount<0?Math.abs(t.amount):0),0)),0);
   const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
+  const weekData=Array.from({length:7},(_,index)=>{const date=new Date(sevenDaysAgo);date.setDate(sevenDaysAgo.getDate()+index);const iso=toIsoDate(date);return {date:iso,value:netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO===iso))};});
   const weekExpenses = netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today));
   const recurrenceDuePending = recurrences
     .filter(item=>item.active&&item.nextDate<=today)
@@ -521,7 +522,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
         <button className="dashboard-month-balance panel" onClick={()=>setActive("Bilancio")}>
           <div className="panel-title"><div><h3>Bilancio del mese</h3><p>{currentMonthLabel}</p></div><AppIcon name="forward" size={18}/></div>
           <div className="dashboard-balance-content">
-            <div className="dashboard-balance-donut" style={{background:`conic-gradient(#7051bf 0 ${income+expenses>0?Math.round((expenses/(income+expenses))*100):0}%,#d8d0ec ${income+expenses>0?Math.round((expenses/(income+expenses))*100):0}% 100%)`}}>
+            <div className="dashboard-balance-donut" style={{background:`conic-gradient(#559476 0 ${income+expenses>0?Math.round((income/(income+expenses))*100):50}%,#c9716c ${income+expenses>0?Math.round((income/(income+expenses))*100):50}% 100%)`}}>
               <div><strong>{money(balance)}</strong><span>SALDO</span></div>
             </div>
             <div className="dashboard-balance-lines">
@@ -557,7 +558,7 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
           <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Ultimi 7 giorni</span><b>{money(weekExpenses)}</b></button>
           <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>{money(wealth)}</b></button>
         </div>
-        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"PATRIMONIO ATTUALE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(wealth)}</h3></div><Sparkline mode={chart}/></div>
+        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"PATRIMONIO ATTUALE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(wealth)}</h3></div><Sparkline mode={chart} weekData={weekData}/></div>
       </section>
 
       <section className="dashboard-stack">
