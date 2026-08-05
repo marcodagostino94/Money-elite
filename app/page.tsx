@@ -66,6 +66,19 @@ type DashboardPreferences = {
 };
 
 const DASHBOARD_PREFERENCES_KEY = "money-elite-dashboard-preferences-v1";
+const ACCOUNT_ORDER_KEY = "money-elite-account-order-v1";
+
+const sortAccountsBySavedOrder = (accounts: MoneyAccount[]) => {
+  if (typeof window === "undefined") return accounts;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(ACCOUNT_ORDER_KEY) || "[]") as string[];
+    if (!Array.isArray(saved) || !saved.length) return accounts;
+    const positions = new Map(saved.map((id,index)=>[id,index]));
+    return [...accounts].sort((a,b)=>(positions.get(a.id)??Number.MAX_SAFE_INTEGER)-(positions.get(b.id)??Number.MAX_SAFE_INTEGER));
+  } catch {
+    return accounts;
+  }
+};
 
 const nav: { label: Section; icon: string }[] = [
   { label: "Dashboard", icon: "dashboard" },
@@ -76,7 +89,6 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Conti", icon: "accounts" },
   { label: "Carte di credito", icon: "card" },
   { label: "Budget", icon: "budget" },
-  { label: "Debiti", icon: "debts" },
   { label: "Report", icon: "report" },
   { label: "Impostazioni", icon: "settings" },
 ];
@@ -431,7 +443,7 @@ function Sparkline({ mode = "wealth" }: { mode?: "wealth" | "week" | "month" }) 
 }
 
 function Dashboard({ transactions, accounts, cards, budgets, categories, recurrences, dashboardAccountIds, setActive, confirmTransaction, openTransaction }: { transactions: Transaction[]; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; categories: MoneyCategory[]; recurrences: MoneyRecurrence[]; dashboardAccountIds: string[]; setActive: (s: Section) => void; confirmTransaction: (t: Transaction) => void | Promise<void>; openTransaction: (t: Transaction) => void }) {
-  const [chart, setChart] = useState<"week" | "month">("week");
+  const [chart, setChart] = useState<"week" | "wealth">("week");
   const today = toIsoDate(new Date());
   const currentMonth = today.slice(0,7);
   const effectiveTransactions = transactions.filter(isEffectiveTransaction);
@@ -450,8 +462,6 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
   const dashboardBudgets = budgets.filter(item=>item.month.startsWith(currentMonth)).map(item=>{const category=categories.find(c=>c.id===item.categoryId);const spent=effectiveTransactions.filter(t=>t.categoryId===item.categoryId&&t.amount<0&&t.dateISO?.startsWith(currentMonth)).reduce((sum,t)=>sum+Math.abs(t.amount),0);return {name:category?.name||"Categoria",spent,limit:item.amount,color:category?.color||"#7c65b5"};});
   const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate()-6);
   const weekExpenses = netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(sevenDaysAgo)&&transaction.dateISO<=today));
-  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate()-29);
-  const monthExpenses = netExpenses(effectiveTransactions.filter(transaction=>transaction.dateISO&&transaction.dateISO>=toIsoDate(thirtyDaysAgo)&&transaction.dateISO<=today));
   const recurrenceDuePending = recurrences
     .filter(item=>item.active&&item.nextDate<=today)
     .map(recurrence=>{
@@ -541,18 +551,13 @@ function Dashboard({ transactions, accounts, cards, budgets, categories, recurre
         </div>
       </button>
 
-      <section className="panel insight-panel dashboard-wealth-chart">
-        <div className="panel-title"><div><h3>Andamento patrimonio</h3><p>Evoluzione del patrimonio complessivo</p></div><button className="text-button" onClick={()=>setActive("Report")}>Report →</button></div>
-        <div className="insight-chart"><div><small>PATRIMONIO ATTUALE</small><h3>{money(wealth)}</h3></div><Sparkline mode="wealth"/></div>
-      </section>
-
       <section className="panel insight-panel dashboard-spending-chart">
-        <div className="panel-title dashboard-chart-title"><div><h3>Grafici delle spese</h3><p>Controlla l'andamento delle uscite effettive</p></div></div>
+        <div className="panel-title dashboard-chart-title"><div><h3>Andamento finanziario</h3><p>Spese recenti e patrimonio complessivo</p></div></div>
         <div className="chart-tabs spending-tabs">
           <button className={chart==="week"?"active":""} onClick={()=>setChart("week")}><span>Ultimi 7 giorni</span><b>{money(weekExpenses)}</b></button>
-          <button className={chart==="month"?"active":""} onClick={()=>setChart("month")}><span>Ultimi 30 giorni</span><b>{money(monthExpenses)}</b></button>
+          <button className={chart==="wealth"?"active":""} onClick={()=>setChart("wealth")}><span>Andamento patrimonio</span><b>{money(wealth)}</b></button>
         </div>
-        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"SPESA MENSILE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(monthExpenses)}</h3></div><Sparkline mode={chart}/></div>
+        <div className="insight-chart"><div><small>{chart==="week"?"SPESA SETTIMANALE":"PATRIMONIO ATTUALE"}</small><h3>{chart==="week"?`Media ${money(weekExpenses/7)} al giorno`:money(wealth)}</h3></div><Sparkline mode={chart}/></div>
       </section>
 
       <section className="dashboard-stack">
@@ -635,7 +640,7 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
-function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, dashboardAccountIds, onChangeDashboardAccounts, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction, editRecurrence, duplicateRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids:string[])=>void; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; duplicateRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
+function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences, categories, transactions, dashboardAccountIds, onChangeDashboardAccounts, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, onMoveAccount, openTransaction, editRecurrence, duplicateRecurrence, refresh }: { section: Exclude<Section, "Dashboard" | "Transazioni">; onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void; accounts: MoneyAccount[]; cards: MoneyCard[]; budgets: MoneyBudget[]; recurrences: MoneyRecurrence[]; categories: MoneyCategory[]; transactions: Transaction[]; dashboardAccountIds: string[]; onChangeDashboardAccounts: (ids:string[])=>void; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; onMoveAccount: (accountId:string,direction:-1|1)=>void; openTransaction: (transaction: Transaction) => void; editRecurrence: (recurrence: MoneyRecurrence) => void; duplicateRecurrence: (recurrence: MoneyRecurrence) => void; refresh: () => Promise<void> }) {
   const legacyCards: Record<string, { name: string; sub: string; value: string; icon: string }[]> = {
     Conti: [
       { name: "Conto principale", sub: "Banca ·•• 4832", value: "€ 8.940,65", icon: "B" },
@@ -657,7 +662,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} transactions={transactions} openTransaction={openTransaction} />;
   if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence} onDuplicate={duplicateRecurrence}/>;
   if (section === "Abbonamenti") return <SubscriptionsSection recurrences={recurrences} categories={categories} refresh={refresh} onEdit={editRecurrence}/>;
-  if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} openTransaction={openTransaction}/>;
+  if (section === "Conti") return <AccountsSectionReal onAdd={onAdd} accounts={accounts} transactions={transactions} onSaveAccount={onSaveAccount} onToggleAccount={onToggleAccount} onArchiveAccount={onArchiveAccount} onDeleteAccount={onDeleteAccount} onMoveAccount={onMoveAccount} openTransaction={openTransaction}/>;
   if (section === "Carte di credito") return <CreditCardsSection onAdd={onAdd} cards={cards} accounts={accounts} transactions={transactions} refresh={refresh} openTransaction={openTransaction}/>;
   const info = sectionData[section];
   return (
@@ -693,7 +698,7 @@ function AccountModal({ account, close, save }: { account?: MoneyAccount; close:
   </form></div>;
 }
 
-function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, openTransaction }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void; accounts: MoneyAccount[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; openTransaction: (transaction: Transaction) => void }) {
+function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onToggleAccount, onArchiveAccount, onDeleteAccount, onMoveAccount, openTransaction }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void; accounts: MoneyAccount[]; transactions: Transaction[]; onSaveAccount: (draft: AccountDraft, account?: MoneyAccount) => Promise<void>; onToggleAccount: (account: MoneyAccount) => Promise<void>; onArchiveAccount: (account: MoneyAccount) => Promise<void>; onDeleteAccount: (account: MoneyAccount) => Promise<void>; onMoveAccount: (accountId:string,direction:-1|1)=>void; openTransaction: (transaction: Transaction) => void }) {
   const [editor, setEditor] = useState<MoneyAccount | "new" | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -723,7 +728,7 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
       <article className="panel month-transactions">{rows.length?rows.map(transaction=><TransactionRow key={transaction.id} t={transaction} onOpen={openTransaction}/>):<div className="empty">Nessuna transazione in {monthLabel(detailMonth)}.</div>}</article>
       {!detail.archived&&<QuickActions openAction={kind=>onAdd(kind,detail.name)}/>}</section>;
   }
-  return <section className="section-page"><div className="accounts-total"><div><small>TOTALE DEI CONTI VISIBILI</small></div><strong>{money(visibleTotal)}</strong></div><div className="accounts-list">{activeAccounts.map(account=><article className={`account-row ${account.type==="meal_vouchers"?"voucher-account":""} ${account.hidden?"hidden-account":""}`} key={account.id} onClick={()=>{setDetailId(account.id);setDetailMonth(monthKeyFromDate(new Date()))}}><div className="item-icon real-icon"><AppIcon name={account.icon}/></div><div><h3>{account.name}</h3><strong>{account.hidden?"Saldo nascosto":money(account.balance)}</strong>{account.type==="meal_vouchers"&&!account.hidden&&<div className="voucher-meter"><i style={{width:"60%"}}/><span>{account.voucherCount} buoni</span></div>}</div><button className="eye-button modern" onClick={event=>{event.stopPropagation();void onToggleAccount(account)}}><AppIcon name={account.hidden?"eyeOff":"eye"} size={18}/></button><button onClick={event=>{event.stopPropagation();onAdd("transfer",account.name)}}><AppIcon name="transfer" size={18}/></button><button onClick={event=>{event.stopPropagation();setMenu(menu===account.id?null:account.id)}}><AppIcon name="more" size={19}/></button>{menu===account.id&&<div className="account-menu" onClick={event=>event.stopPropagation()}><button onClick={()=>onAdd("income",account.name)}><AppIcon name="income"/> Aggiungi entrata</button><button onClick={()=>onAdd("expense",account.name)}><AppIcon name="expense"/> Aggiungi uscita</button><button onClick={()=>{setEditor(account);setMenu(null)}}><AppIcon name="edit"/> Modifica conto</button><button onClick={()=>void onArchiveAccount(account)}><AppIcon name="archive"/> Archivia conto</button><button className="danger" onClick={()=>void onDeleteAccount(account)}><AppIcon name="trash"/> Elimina conto</button></div>}</article>)}</div>{archivedAccounts.length>0&&<div className="archived-accounts"><div><b>Conti archiviati</b></div>{archivedAccounts.map(account=><button key={account.id} onClick={()=>setDetailId(account.id)}><span><AppIcon name={account.icon}/></span><div><b>{account.name}</b><small>Sola consultazione</small></div><strong>{money(account.balance)}</strong></button>)}</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor("new")}><AppIcon name="plus" size={22}/></button>{editor&&<AccountModal account={editor==="new"?undefined:editor} close={()=>setEditor(null)} save={async(draft,account)=>{await onSaveAccount(draft,account);setEditor(null)}}/>}</section>;
+  return <section className="section-page"><div className="accounts-total"><div><small>TOTALE DEI CONTI VISIBILI</small></div><strong>{money(visibleTotal)}</strong></div><div className="accounts-list">{activeAccounts.map((account,index)=><article className={`account-row ${account.type==="meal_vouchers"?"voucher-account":""} ${account.hidden?"hidden-account":""}`} key={account.id} onClick={()=>{setDetailId(account.id);setDetailMonth(monthKeyFromDate(new Date()))}}><div className="item-icon real-icon"><AppIcon name={account.icon}/></div><div><h3>{account.name}</h3><strong>{account.hidden?"Saldo nascosto":money(account.balance)}</strong>{account.type==="meal_vouchers"&&!account.hidden&&<div className="voucher-meter"><i style={{width:"60%"}}/><span>{account.voucherCount} buoni</span></div>}</div><button className="eye-button modern" onClick={event=>{event.stopPropagation();void onToggleAccount(account)}}><AppIcon name={account.hidden?"eyeOff":"eye"} size={18}/></button><button onClick={event=>{event.stopPropagation();onAdd("transfer",account.name)}}><AppIcon name="transfer" size={18}/></button><button onClick={event=>{event.stopPropagation();setMenu(menu===account.id?null:account.id)}}><AppIcon name="more" size={19}/></button>{menu===account.id&&<div className="account-menu" onClick={event=>event.stopPropagation()}><button disabled={index===0} onClick={()=>onMoveAccount(account.id,-1)}><AppIcon name="up"/> Sposta più in alto</button><button disabled={index===activeAccounts.length-1} onClick={()=>onMoveAccount(account.id,1)}><AppIcon name="down"/> Sposta più in basso</button><button onClick={()=>onAdd("income",account.name)}><AppIcon name="income"/> Aggiungi entrata</button><button onClick={()=>onAdd("expense",account.name)}><AppIcon name="expense"/> Aggiungi uscita</button><button onClick={()=>{setEditor(account);setMenu(null)}}><AppIcon name="edit"/> Modifica conto</button><button onClick={()=>void onArchiveAccount(account)}><AppIcon name="archive"/> Archivia conto</button><button className="danger" onClick={()=>void onDeleteAccount(account)}><AppIcon name="trash"/> Elimina conto</button></div>}</article>)}</div>{archivedAccounts.length>0&&<div className="archived-accounts"><div><b>Conti archiviati</b></div>{archivedAccounts.map(account=><button key={account.id} onClick={()=>setDetailId(account.id)}><span><AppIcon name={account.icon}/></span><div><b>{account.name}</b><small>Sola consultazione</small></div><strong>{money(account.balance)}</strong></button>)}</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor("new")}><AppIcon name="plus" size={22}/></button>{editor&&<AccountModal account={editor==="new"?undefined:editor} close={()=>setEditor(null)} save={async(draft,account)=>{await onSaveAccount(draft,account);setEditor(null)}}/>}</section>;
 }
 
 function AccountsSection({ onAdd }: { onAdd: (kind: ActionKind, defaultAccount?: string) => void }) {
@@ -1026,6 +1031,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [subscription, setSubscription] = useState(initial?.subscription ?? (preset === "subscription"));
   const [autoAccounted, setAutoAccounted] = useState(initial?.automaticAccounting ?? true);
   const [categoryOpen, setCategoryOpen] = useState(!initial && !refundSource && kind !== "transfer");
+  const [categoryQuery, setCategoryQuery] = useState("");
   const [accountOpen, setAccountOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
   const [selectedDateISO, setSelectedDateISO] = useState(initial?.dateISO || toIsoDate(new Date()));
@@ -1047,6 +1053,8 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
     root,
     children: categories.filter(category => category.parentId === root.id).sort((a,b)=>a.name.localeCompare(b.name,"it")),
   }));
+  const normalizedCategoryQuery=categoryQuery.trim().toLocaleLowerCase("it");
+  const visibleCategoryGroups=categoryGroups.map(group=>{const rootMatches=group.root.name.toLocaleLowerCase("it").includes(normalizedCategoryQuery);return {...group,children:normalizedCategoryQuery&&!rootMatches?group.children.filter(child=>child.name.toLocaleLowerCase("it").includes(normalizedCategoryQuery)):group.children};}).filter(group=>!normalizedCategoryQuery||group.root.name.toLocaleLowerCase("it").includes(normalizedCategoryQuery)||group.children.length>0);
   const labels = kind === "expense"
     ? { eyebrow: "NUOVA USCITA", title: "Registra un’uscita", save: "Salva uscita", planned: "Uscita pianificata" }
     : kind === "income"
@@ -1098,9 +1106,10 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className={`save-action ${kind}`}>{refundSource?"Salva rimborso":labels.save}</button></div>
     {categoryOpen && <div className="category-picker">
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><button type="button" onClick={()=>setCategoryOpen(false)}>×</button></div>
-      <div className="category-search"><AppIcon name="search" size={15}/><input placeholder="Cerca categoria..." /></div>
+      <div className="category-search"><AppIcon name="search" size={15}/><input value={categoryQuery} onChange={event=>setCategoryQuery(event.target.value)} placeholder="Cerca categoria..." /></div>
       <div className="category-tree">
-        {categoryGroups.map(({root,children})=>{const rootStyle=categoryVisual(root);return <div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:rootStyle.color,background:`${rootStyle.color}18`}}><AppIcon name={rootStyle.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expandedCategory===root.name?"up":"down"} size={15}/></i></button>{expandedCategory===root.name&&children.length>0&&<div className="subcategory-list">{children.map(child=>{const childStyle=categoryVisual(child);const voucher=mealVoucherLeaf(child.name);return <button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(voucher){setSelectedAccount(mealVoucherAccount?.name || "Buoni pasto");setSelectedCardId(null)};setCategoryOpen(false);if(!voucher)setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:childStyle.color,background:`${childStyle.color}18`}}><AppIcon name={childStyle.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>})}</div>}</div>})}
+        {visibleCategoryGroups.map(({root,children})=>{const rootStyle=categoryVisual(root);const expanded=Boolean(normalizedCategoryQuery)||expandedCategory===root.name;return <div className="category-group" key={root.id}><button type="button" onClick={()=>{if(!children.length){setSelectedCategory(root.name);setCategoryOpen(false);if(!selectedAccount)setAccountOpen(true)}else setExpandedCategory(expandedCategory===root.name?"":root.name)}}><span className="real-icon" style={{color:rootStyle.color,background:`${rootStyle.color}18`}}><AppIcon name={rootStyle.icon} size={16}/></span><b>{root.name}</b><i><AppIcon name={!children.length?"forward":expanded?"up":"down"} size={15}/></i></button>{expanded&&children.length>0&&<div className="subcategory-list">{children.map(child=>{const childStyle=categoryVisual(child);const voucher=mealVoucherLeaf(child.name);return <button type="button" className="subcategory-choice" key={child.id} onClick={()=>{setSelectedCategory(`${root.name} › ${child.name}`);if(voucher){setSelectedAccount(mealVoucherAccount?.name || "Buoni pasto");setSelectedCardId(null)};setCategoryOpen(false);if(!voucher)setAccountOpen(true)}}><span className="sub-symbol real-icon" style={{color:childStyle.color,background:`${childStyle.color}18`}}><AppIcon name={childStyle.icon} size={16}/></span><div><b>{child.name}</b></div><i><AppIcon name="forward" size={14}/></i></button>})}</div>}</div>})}
+        {!visibleCategoryGroups.length&&<div className="empty">Nessuna categoria trovata.</div>}
       </div>
     </div>}
     {accountOpen && <div className="account-picker-layer"><div className="account-picker-card"><h3>Seleziona conto</h3>{usableAccounts.map(account=><button type="button" key={account.id} onClick={()=>{setSelectedAccount(account.name);setSelectedCardId(null);setAccountOpen(false)}}><span><AppIcon name={account.icon} size={18}/></span><b>{account.name}</b><strong>{money(account.balance)}</strong></button>)}{cards.filter(card=>!card.archived).map(card=>{const linked=usableAccounts.find(account=>account.id===card.linkedAccountId);return <button type="button" key={card.id} onClick={()=>{setSelectedAccount(linked?.name||"");setSelectedCardId(card.id);setAccountOpen(false)}}><span><AppIcon name="card" size={18}/></span><b>{card.name}</b><strong>Carta di credito</strong></button>})}<button type="button" className="cancel-picker" onClick={()=>setAccountOpen(false)}>Annulla</button></div></div>}
@@ -1191,12 +1200,13 @@ export default function Home() {
       // newer snapshot, otherwise balances can temporarily revert or jump.
       if (sequence !== refreshSequence.current) return;
 
-      setAccounts(data.accounts);
+      const orderedAccounts=sortAccountsBySavedOrder(data.accounts);
+      setAccounts(orderedAccounts);
       setCategories(data.categories);
       setCards(data.cards);
       setBudgets(data.budgets);
       setRecurrences(data.recurrences);
-      setTransactions(data.transactions.map(row => transactionFromDatabase(row, data.accounts, data.categories, data.cards)));
+      setTransactions(data.transactions.map(row => transactionFromDatabase(row, orderedAccounts, data.categories, data.cards)));
       setDataError("");
     } catch (error) {
       if (sequence !== refreshSequence.current) return;
@@ -1284,6 +1294,24 @@ export default function Home() {
     if (result.error) { setDataError(result.error.message); return; }
     setModal(null);
     await refreshData(user);
+  };
+  const moveAccount = (accountId:string,direction:-1|1) => {
+    setAccounts(current=>{
+      const active=current.filter(account=>!account.archived);
+      const index=active.findIndex(account=>account.id===accountId);
+      const target=index+direction;
+      if(index<0||target<0||target>=active.length)return current;
+      [active[index],active[target]]=[active[target],active[index]];
+      const activeById=new Map(active.map((account,position)=>[account.id,position]));
+      const next=[...current].sort((a,b)=>{
+        if(a.archived&&b.archived)return 0;
+        if(a.archived)return 1;
+        if(b.archived)return -1;
+        return (activeById.get(a.id)??0)-(activeById.get(b.id)??0);
+      });
+      window.localStorage.setItem(ACCOUNT_ORDER_KEY,JSON.stringify(next.map(account=>account.id)));
+      return next;
+    });
   };
   const openRecurrenceEditor = (recurrence: MoneyRecurrence, duplicate = false) => {
     const category = categories.find(item => item.id === recurrence.categoryId);
@@ -1541,12 +1569,12 @@ export default function Home() {
         <Header active={active} />
         <div className="page-content">
           {dataError && <div className="data-error" role="alert">{dataError}<button onClick={()=>void refreshData()}>Riprova</button></div>}
-          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} recurrences={recurrences} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} duplicateRecurrence={recurrence=>openRecurrenceEditor(recurrence,true)} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>} 
+          {active === "Dashboard" ? <Dashboard transactions={transactions} accounts={accounts} cards={cards} budgets={budgets} categories={categories} recurrences={recurrences} dashboardAccountIds={dashboardAccountIds} setActive={setActive} confirmTransaction={confirmPlannedTransaction} openTransaction={setSelectedTransaction}/> : active === "Transazioni" ? <TransactionsSection transactions={transactions.filter(transaction=>!transaction.dueDate||Boolean(transaction.confirmedAt))} openTransaction={setSelectedTransaction}/> : <GenericSection section={active} accounts={accounts} cards={cards} budgets={budgets} recurrences={recurrences} categories={categories} transactions={transactions} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={updateDashboardAccounts} onSaveAccount={saveAccount} onToggleAccount={toggleAccount} onArchiveAccount={archiveAccount} onDeleteAccount={deleteAccount} onMoveAccount={moveAccount} openTransaction={setSelectedTransaction} editRecurrence={openRecurrenceEditor} duplicateRecurrence={recurrence=>openRecurrenceEditor(recurrence,true)} refresh={()=>refreshData(user)} onAdd={(kind,defaultAccount,cardId)=>setModal({kind,preset:"normal",defaultAccount,cardId})}/>} 
         </div>
       </main>
       {(["Dashboard","Transazioni","Pianificate"] as Section[]).includes(active) && <QuickActions plannedLabels={active==="Pianificate"} allowTransfer={active !== "Transazioni"} openAction={kind=>setModal({kind,preset:active==="Pianificate"?"planned":"normal"})} />}
       {active === "Abbonamenti" && <button className="quick-main quick-standalone" onClick={()=>setModal({kind:"expense",preset:"subscription"})}>+</button>}
-      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:t.dueDate?"planned":"normal",defaultAccount:t.account,initial:t,editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>}
+      {selectedTransaction&&<TransactionDetail transaction={selectedTransaction} close={()=>setSelectedTransaction(null)} account={accountTransaction} refund={beginRefund} skip={()=>void skipPlannedTransaction(selectedTransaction)} repeatNow={()=>void repeatPlannedNow(selectedTransaction)} duplicate={()=>{const t=selectedTransaction;setSelectedTransaction(null);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:"normal",defaultAccount:t.account,initial:{...t,id:crypto.randomUUID()}})}} edit={()=>{const t=selectedTransaction;setSelectedTransaction(null);const stillPending=Boolean(t.dueDate&&!t.confirmedAt);setModal({kind:t.kind==="transfer"?"transfer":t.amount<0?"expense":"income",preset:stillPending?"planned":"normal",defaultAccount:t.account,initial:{...t,planned:stillPending},editing:true})}} remove={()=>void removeTransaction(selectedTransaction)}/>} 
       {modal && <TransactionModal kind={modal.kind} preset={modal.preset} defaultAccount={modal.defaultAccount} cardId={modal.cardId} initial={modal.initial} editing={modal.editing} refundSource={modal.refundSource} accounts={accounts} cards={cards} categories={categories} close={()=>setModal(null)} add={saveTransaction}/>}
     </div>
   );
