@@ -17,6 +17,7 @@ type Section =
   | "Budget"
   | "Debiti"
   | "Report"
+  | "Informazioni"
   | "Impostazioni";
 
 type Transaction = {
@@ -90,6 +91,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Carte di credito", icon: "card" },
   { label: "Budget", icon: "budget" },
   { label: "Report", icon: "report" },
+  { label: "Informazioni", icon: "info" },
   { label: "Impostazioni", icon: "settings" },
 ];
 
@@ -244,7 +246,8 @@ const iconMap: Record<string, L.LucideIcon> = {
   flame:L.Flame,light:L.Lightbulb,cleaning:L.SprayCan,bike:L.Bike,bus:L.BusFront,beach:L.Umbrella,
   cinema:L.Clapperboard,fun:L.Sparkles,tax:L.ReceiptText,sport:L.Dumbbell,more:L.MoreHorizontal,
   plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,logout:L.LogOut,
-  pause:L.Pause,play:L.Play,copy:L.Copy,
+  pause:L.Pause,play:L.Play,copy:L.Copy,info:L.Info,cigarette:L.Cigarette,drink:L.Martini,perfume:L.SprayCan,
+  betting:L.Dices,justice:L.Scale,garage:L.Warehouse,
   eye:L.Eye,eyeOff:L.EyeOff,check:L.Check,down:L.ChevronDown,up:L.ChevronUp,clock:L.Clock3,stethoscope:L.Stethoscope,
 };
 
@@ -258,33 +261,39 @@ const categoryIcon = (name: string) => {
   const icons: Record<string, string> = {
     "730":"document","Abbigliamento":"clothes","Abbonamenti":"subscriptions","Alimenti":"groceries",
     "Altri lavori":"work","Amazon":"package","App Store":"technology","Arredamento":"furniture",
-    "Automobile":"car","Bar":"coffee","Box":"home","Buoni pasto":"voucher","Carburante":"fuel",
-    "Casa":"home","Cinema":"cinema","Condominio":"building","Cosmesi":"health","Cura Personale":"health",
-    "Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"coffee",
+    "Automobile":"car","Bar":"coffee","Box":"garage","Buoni pasto":"voucher","Carburante":"fuel",
+    "Casa":"home","Cinema":"cinema","Condominio":"building","Cosmesi":"perfume","Cura Personale":"health",
+    "Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"drink",
     "Farmacia":"medical","Finanziamenti":"finance","Gas":"flame","Giardino":"home","Guadagni":"income",
     "Hotel":"building","iCloud":"cloud","Lavori":"hammer","Lenti a contatto":"eye","Luce":"light",
-    "Luce e Gas":"energy","Mare":"beach","Medici":"stethoscope","Multe":"tax","Noleggio":"car",
+    "Luce e Gas":"energy","Mare":"travel","Medici":"stethoscope","Multe":"justice","Noleggio":"car",
     "Parcheggio":"parking","Pranzi/Cene":"food","Pranzi/Cene Viaggi":"food","Prodotti Casa":"home",
     "Proventi Finanziari":"finance","Pulizie":"cleaning","Reddito":"income","Regali":"gift","Regalo":"gift",
-    "Rifiuti":"trash","Rimborso":"refund","Riscaldamento":"flame","Salute":"health","Scommesse":"fun",
+    "Rifiuti":"trash","Rimborso":"refund","Riscaldamento":"flame","Salute":"health","Scommesse":"betting",
     "Scooter":"bike","Sky e Netflix":"streaming","Spese Personali":"clothes","Spotify":"music","Sport":"sport",
-    "Stipendio":"finance","Straordinari":"clock","Supermercato":"groceries","Tabacchi":"circle",
-    "Tasse":"tax","Tecnologia":"technology","Telepass":"telepass","Trasporti":"car","Trasporti pubblici":"bus",
+    "Stipendio":"finance","Straordinari":"clock","Supermercato":"groceries","Tabacchi":"cigarette",
+    "Tasse":"justice","Tecnologia":"technology","Telepass":"telepass","Trasporti":"car","Trasporti pubblici":"bus",
     "Trasporti Viaggi":"travel","Viaggi":"travel","Vodafone":"technology",
   };
   return icons[name] || "circle";
 };
 
 const categoryColor = (name: string) => {
-  const colors: Record<string,string> = {
-    "Reddito":"#43a66f","Stipendio":"#43a66f","Straordinari":"#348d5c","730":"#6bb98b","Altri lavori":"#527e67","Buoni pasto":"#d39a2f",
-    "Guadagni":"#26745a","Regalo":"#397c64","Rimborso":"#4f967c","Proventi Finanziari":"#e18a32",
-    "Alimenti":"#35a8c8","Bar":"#4fb5cf","Drink":"#279bbd","Pranzi/Cene":"#3b9bb6","Supermercato":"#62bdd4",
-    "Salute":"#dc5b61","Farmacia":"#e26b70","Medici":"#c94c53","Sport":"#d86b62","Lenti a contatto":"#c76578",
-    "Casa":"#547fa8","Abbonamenti":"#7c65b5","Spese Personali":"#bd6e9b","Trasporti":"#4f8ca8","Viaggi":"#df9d43",
-    "Divertimento":"#a067bc","Tasse":"#7e8792",
-  };
-  return colors[name] || "#678098";
+  const groups: [string[],string][] = [
+    [["Reddito","Stipendio","Straordinari","730","Altri lavori","Buoni pasto"],"#16A05D"],
+    [["Guadagni","Regalo","Regali","Rimborso"],"#00866E"],
+    [["Proventi Finanziari"],"#C98500"],
+    [["Alimenti","Bar","Drink","Pranzi/Cene","Supermercato"],"#F07818"],
+    [["Salute","Farmacia","Medici","Sport","Lenti a contatto"],"#D93F55"],
+    [["Casa","Arredamento","Condominio","Gas","Giardino","Lavori","Luce","Luce e Gas","Prodotti Casa","Pulizie","Riscaldamento","Rifiuti","Vodafone"],"#2878C7"],
+    [["Abbonamenti","App Store","Finanziamenti","iCloud","Sky e Netflix","Spotify"],"#7651C6"],
+    [["Spese Personali","Abbigliamento","Amazon","Cosmesi","Cura Personale","Scommesse","Tabacchi","Tecnologia"],"#D43A91"],
+    [["Trasporti","Automobile","Box","Carburante","Noleggio","Parcheggio","Scooter","Telepass","Trasporti pubblici"],"#009BB5"],
+    [["Viaggi","Divertimento Viaggi","Hotel","Pranzi/Cene Viaggi","Trasporti Viaggi"],"#00A184"],
+    [["Divertimento","Cinema","Discoteca","Mare"],"#9B42C6"],
+    [["Tasse","Multe"],"#596579"],
+  ];
+  return groups.find(([names])=>names.includes(name))?.[1] || "#5C718A";
 };
 
 // Le categorie storiche di Money Elite hanno una propria identita visiva.
@@ -416,9 +425,6 @@ function Header({ active }: { active: Section }) {
   return (
     <header>
       <div><p>{todayLabel}</p><h1>{title}</h1></div>
-      <div className="header-actions">
-        <button className="round" aria-label="Notifiche"><AppIcon name="notification" size={17}/><i /></button>
-      </div>
     </header>
   );
 }
@@ -638,6 +644,7 @@ const sectionData: Record<Exclude<Section, "Dashboard" | "Transazioni">, { title
   Budget: { title: "Budget", intro: "Definisci i limiti mensili e controlla quanto resta.", action: "Crea budget" },
   Debiti: { title: "Debiti e crediti", intro: "Una sezione opzionale per ricordare chi deve dare cosa.", action: "Nuovo debito" },
   Report: { title: "Report e analisi", intro: "Leggi le tue abitudini e confronta i periodi.", action: "Esporta report" },
+  Informazioni: { title: "Informazioni", intro: "Versione, tecnologia e indicazioni utili sull'app.", action: "" },
   Impostazioni: { title: "Impostazioni", intro: "Personalizza Money Elite e gestisci i tuoi dati.", action: "Salva modifiche" },
 };
 
@@ -659,6 +666,7 @@ function GenericSection({ section, onAdd, accounts, cards, budgets, recurrences,
   };
   if (section === "Budget") return <BudgetSection budgets={budgets} categories={categories} transactions={transactions} refresh={refresh}/>;
   if (section === "Report") return <ReportSection />;
+  if (section === "Informazioni") return <InformationSection />;
   if (section === "Impostazioni") return <SettingsSection accounts={accounts} dashboardAccountIds={dashboardAccountIds} onChangeDashboardAccounts={onChangeDashboardAccounts}/>;
   if (section === "Bilancio") return <BalanceHistorySection onAdd={onAdd} transactions={transactions} openTransaction={openTransaction} />;
   if (section === "Pianificate") return <PlannedSection recurrences={recurrences} accounts={accounts} cards={cards} categories={categories} refresh={refresh} onEdit={editRecurrence} onDuplicate={duplicateRecurrence}/>;
@@ -884,7 +892,7 @@ function SubscriptionsSection({ recurrences, categories, refresh, onEdit }: { re
   const subscriptions=recurrences.filter(item=>item.isSubscription&&item.active);
   const totalMonth=subscriptions.reduce((sum,item)=>sum+item.amount,0);
   const remove=async(id:string)=>{if(!window.confirm("Eliminare questo abbonamento?"))return;const {error}=await getSupabaseBrowserClient().from("recurrences").update({active:false}).eq("id",id);if(error){alert(error.message);return;}await refresh();};
-  return <section className="section-page"><div className="subscription-summary"><div><small>PROSSIMI 30 GIORNI</small><strong>{money(totalMonth)}</strong></div><div><small>PROSSIMI 365 GIORNI</small><strong>{money(totalMonth*12)}</strong></div><div><small>MEDIA MENSILE</small><strong>{money(totalMonth)}</strong></div></div><article className="panel subscription-list">{subscriptions.length?subscriptions.map(item=>{const category=categories.find(c=>c.id===item.categoryId);return <div className="subscription-row" key={item.id}><div className="subscription-icon" style={{color:category?.color||"#7c65b5",background:`${category?.color||"#7c65b5"}18`}}><AppIcon name={category?.icon||"subscriptions"}/></div><div className="subscription-body subscription-edit-area" role="button" tabIndex={0} onClick={()=>onEdit(item)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")onEdit(item)}}><h3>{item.notes||category?.name||"Abbonamento"}</h3><div className="subscription-dates"><span>Prossima data</span><b>{formatItalianDate(item.nextDate)}</b><span>{item.frequency==="monthly"?"Ogni mese":item.frequency}</span></div><div className="progress"><i style={{width:"45%",background:"#7c65b5"}}/></div><strong>{money(item.amount)} ogni {item.frequency==="monthly"?"mese":item.frequency}</strong><small>{category?.name||"Senza categoria"}</small></div><button type="button" onClick={()=>onEdit(item)} aria-label="Modifica abbonamento"><AppIcon name="edit"/></button><button type="button" onClick={()=>void remove(item.id)} aria-label="Elimina abbonamento"><AppIcon name="trash"/></button></div>}):<div className="empty">Nessun abbonamento. Usa il + per aggiungere una spesa pianificata come abbonamento.</div>}</article></section>;
+  return <section className="section-page"><div className="subscription-summary"><div><small>PROSSIMI 30 GIORNI</small><strong>{money(totalMonth)}</strong></div><div><small>PROSSIMI 365 GIORNI</small><strong>{money(totalMonth*12)}</strong></div><div><small>MEDIA MENSILE</small><strong>{money(totalMonth)}</strong></div></div><article className="panel subscription-list">{subscriptions.length?subscriptions.map(item=>{const category=categories.find(c=>c.id===item.categoryId);const note=item.notes.toLocaleLowerCase("it");const inferredChild=category&&!category.parentId?categories.filter(child=>child.parentId===category.id).find(child=>child.name.toLocaleLowerCase("it").split(/\s+/).some(word=>word.length>3&&note.includes(word))):null;const visualCategory=inferredChild||category;const visual=visualCategory?categoryVisual(visualCategory):{icon:"subscriptions",color:"#7651C6"};return <div className="subscription-row" key={item.id}><div className="subscription-icon" style={{color:visual.color,background:`${visual.color}18`}}><AppIcon name={visual.icon}/></div><div className="subscription-body subscription-edit-area" role="button" tabIndex={0} onClick={()=>onEdit(item)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")onEdit(item)}}><h3>{item.notes||category?.name||"Abbonamento"}</h3><div className="subscription-dates"><span>Prossima data</span><b>{formatItalianDate(item.nextDate)}</b><span>{item.frequency==="monthly"?"Ogni mese":item.frequency}</span></div><div className="progress"><i style={{width:"45%",background:visual.color}}/></div><strong>{money(item.amount)} ogni {item.frequency==="monthly"?"mese":item.frequency}</strong><small>{visualCategory?.name||"Senza categoria"}</small></div><button type="button" onClick={()=>onEdit(item)} aria-label="Modifica abbonamento"><AppIcon name="edit"/></button><button type="button" onClick={()=>void remove(item.id)} aria-label="Elimina abbonamento"><AppIcon name="trash"/></button></div>}):<div className="empty">Nessun abbonamento. Usa il + per aggiungere una spesa pianificata come abbonamento.</div>}</article></section>;
 }
 
 function BudgetSection({ budgets, categories, transactions, refresh }: { budgets: MoneyBudget[]; categories: MoneyCategory[]; transactions: Transaction[]; refresh: () => Promise<void> }) {
@@ -913,6 +921,10 @@ function ReportSection() {
       </div>
     </section>
   );
+}
+
+function InformationSection() {
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4 introduce categorie più riconoscibili, layout compatto e azioni rapide verticali.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -985,7 +997,6 @@ function SettingsSection({ accounts, dashboardAccountIds, onChangeDashboardAccou
         <label>Nome profilo<input defaultValue="Marco" /></label>
         <label>Valuta<select defaultValue="EUR"><option value="EUR">Euro (€)</option><option>USD ($)</option></select></label>
         <label>Inizio del mese<select><option>Giorno 1</option><option>Giorno 27</option></select></label>
-        <div className="toggle-row"><div><b>Sezione debiti</b><span>Mostra debiti e crediti nel menu</span></div><input type="checkbox" defaultChecked /></div>
         <div className="toggle-row"><div><b>Notifiche budget</b><span>Avvisami quando raggiungo l’80%</span></div><input type="checkbox" defaultChecked /></div>
       </article>
 
