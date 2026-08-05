@@ -1,5 +1,14 @@
 # Money Elite v4.0
 
+## Aggiornamento v4.1
+
+- Esteso il bordo colorato delle categorie a transazioni, pianificate, abbonamenti e movimenti dei conti.
+- Compattata la navigazione mensile: sole frecce, senza menu a tendina né testi superflui.
+- La ricerca delle transazioni ora si apre tramite una piccola lente.
+- Rimossi il filtro “Tutte le categorie” e il selettore mensile dalla lista transazioni.
+- Compattato il dettaglio conto: eliminata la grande card riepilogativa e sostituita con saldo e conteggio movimenti in formato ridotto.
+- Ricalibrati i caratteri su iPhone per mantenere leggibilità e maggiore spazio utile.
+
 Data: 5 agosto 2026
 
 ## Categorie e abbonamenti

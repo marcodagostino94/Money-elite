@@ -718,22 +718,13 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
   const detail = accounts.find(account=>account.id===detailId);
   if(detail) {
     const accountTransactions = transactions.filter(transaction=>isEffectiveTransaction(transaction) && (transaction.accountId===detail.id || transaction.destinationAccountId===detail.id));
-    const monthChoices = (() => {
-      const keys = accountTransactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x));
-      const earliest = keys.length ? [...keys].sort()[0] : monthKeyFromDate(new Date());
-      const latest = monthKeyFromDate(new Date());
-      const result:string[]=[];
-      let cursor=earliest;
-      while(cursor<=latest){result.push(cursor);cursor=shiftMonthKey(cursor,1);}
-      return result.reverse();
-    })();
     const rows = accountTransactions
       .filter(transaction=>dateInMonth(transaction.dateISO, detailMonth))
       .map(transaction=>transaction.kind==="transfer" ? {...transaction, amount: transaction.destinationAccountId===detail.id ? Math.abs(transaction.amount) : -Math.abs(transaction.amount)} : transaction);
     return <section className="section-page">
-      <div className="inner-page-header"><button onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CONTO</small><h2>{detail.name}</h2><p>Transazioni di {monthLabel(detailMonth)}</p></div></div>
-      <div className="period-nav"><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={15}/> Mese precedente</button><select className="period-select" value={detailMonth} onChange={event=>setDetailMonth(event.target.value)}>{!monthChoices.includes(detailMonth)&&<option value={detailMonth}>{monthLabel(detailMonth)}</option>}{monthChoices.map(value=><option key={value} value={value}>{monthLabel(value)}</option>)}</select><button onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}>Mese successivo <AppIcon name="forward" size={15}/></button></div>
-      <div className="account-detail-summary"><div className="item-icon real-icon"><AppIcon name={detail.icon}/></div><div className="account-balance-pair"><div><small>SALDO ALLA DATA DI OGGI</small><strong>{money(detail.balance)}</strong></div><div><small>MOVIMENTI VISUALIZZATI</small><strong>{rows.length}</strong></div>{detail.type==="meal_vouchers"&&<span>{detail.voucherCount} buoni da {money(detail.voucherUnitValue||0)}</span>}</div></div>
+      <div className="inner-page-header compact-account-header"><button aria-label="Torna ai conti" onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CONTO</small><h2>{detail.name}</h2></div></div>
+      <div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(detailMonth)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}><AppIcon name="forward" size={18}/></button></div>
+      <div className="account-compact-summary"><span>Saldo ad oggi</span><strong>{money(detail.balance)}</strong><small>{rows.length} {rows.length===1?"movimento":"movimenti"}{detail.type==="meal_vouchers"?` · ${detail.voucherCount} buoni`:""}</small></div>
       <article className="panel month-transactions">{rows.length?rows.map(transaction=><TransactionRow key={transaction.id} t={transaction} onOpen={openTransaction}/>):<div className="empty">Nessuna transazione in {monthLabel(detailMonth)}.</div>}</article>
       {!detail.archived&&<QuickActions openAction={kind=>onAdd(kind,detail.name)}/>}</section>;
   }
@@ -924,7 +915,7 @@ function ReportSection() {
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4 introduce categorie più riconoscibili, layout compatto e azioni rapide verticali.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v4.1</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti e ricorrenze tra le sessioni.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>La versione 4.1 estende i bordi colorati e rende più compatti transazioni e movimenti dei conti.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1020,16 +1011,14 @@ function SettingsSection({ accounts, dashboardAccountIds, onChangeDashboardAccou
 
 function TransactionsSection({ transactions, openTransaction }: { transactions: Transaction[]; openTransaction: (t: Transaction) => void }) {
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [month, setMonth] = useState(monthKeyFromDate(new Date()));
   const visibleTransactions=useMemo(()=>transactions.filter(t=>t.kind!=="transfer"),[transactions]);
-  const categoryOptions=useMemo(()=>Array.from(new Set(visibleTransactions.map(t=>t.category).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"it")),[visibleTransactions]);
-  const months=useMemo(()=>Array.from(new Set(visibleTransactions.map(t=>t.dateISO?.slice(0,7)).filter((x):x is string=>Boolean(x)))).sort().reverse(),[visibleTransactions]);
   const filtered = useMemo(() => visibleTransactions.filter(t => {
     const text=`${t.label} ${t.category} ${t.account} ${t.notes ?? ""}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && (category==="all"||t.category===category) && dateInMonth(t.dateISO,month);
-  }), [visibleTransactions, query, category, month]);
-  return <section className="section-page"><article className="panel full-list"><div className="filter-row"><label><AppIcon name="search" size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca una transazione..." /></label><select value={category} onChange={e=>setCategory(e.target.value)}><option value="all">Tutte le categorie</option>{categoryOptions.map(value=><option key={value} value={value}>{value}</option>)}</select><select value={month} onChange={e=>setMonth(e.target.value)}>{!months.includes(month)&&<option value={month}>{monthLabel(month)}</option>}{months.map(value=><option key={value} value={value}>{monthLabel(value)}</option>)}</select></div><div className="period-nav compact"><button onClick={()=>setMonth(value=>shiftMonthKey(value,-1))}><AppIcon name="back" size={14}/> Precedente</button><strong>{monthLabel(month)}</strong><button onClick={()=>setMonth(value=>shiftMonthKey(value,1))}>Successivo <AppIcon name="forward" size={14}/></button></div>{filtered.map(t=><TransactionRow t={t} key={t.id} onOpen={openTransaction}/>)}{!filtered.length && <div className="empty">Nessuna transazione trovata in {monthLabel(month)}.</div>}</article></section>;
+    return text.includes(query.toLowerCase()) && dateInMonth(t.dateISO,month);
+  }), [visibleTransactions, query, month]);
+  return <section className="section-page"><article className="panel full-list compact-transaction-list"><div className="transactions-toolbar"><div className={`compact-search ${searchOpen?"is-open":""}`}><button aria-label={searchOpen?"Chiudi ricerca":"Cerca transazione"} title={searchOpen?"Chiudi ricerca":"Cerca transazione"} onClick={()=>{setSearchOpen(value=>!value);if(searchOpen)setQuery("")}}><AppIcon name={searchOpen?"close":"search"} size={18}/></button>{searchOpen&&<input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca..." />}</div><div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setMonth(value=>shiftMonthKey(value,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(month)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setMonth(value=>shiftMonthKey(value,1))}><AppIcon name="forward" size={18}/></button></div></div>{filtered.map(t=><TransactionRow t={t} key={t.id} onOpen={openTransaction}/>)}{!filtered.length && <div className="empty">Nessuna transazione trovata in {monthLabel(month)}.</div>}</article></section>;
 }
 
 function TransactionModal({ kind, close, add, accounts, cards, categories, preset = "normal", defaultAccount, cardId, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; cards: MoneyCard[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
