@@ -754,7 +754,6 @@ header h1{font-size:25px!important}
 .money-keypad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .money-keypad-grid>button{height:58px;border:0;border-radius:10px;background:#fff;font-size:25px;font-weight:650;box-shadow:0 1px 2px #0002}
 .money-keypad-grid .money-keypad-confirm{color:#fff;background:#0787f5}.money-keypad-grid .money-keypad-confirm.expense{background:#ef4438}.money-keypad-grid .money-keypad-confirm.income{background:#38a36f}.money-keypad-grid .money-keypad-confirm.transfer{background:#0787f5}
-.information-hero h2::after{content:".1"}
 @media(max-width:620px){
   .keyboard-aware-picker{top:var(--picker-vv-top,0)!important;bottom:auto!important;height:var(--picker-vv-height,100dvh)!important;min-height:0!important}
   .keyboard-aware-picker>.category-picker{position:absolute!important;inset:8px 10px!important;max-height:none!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden!important}

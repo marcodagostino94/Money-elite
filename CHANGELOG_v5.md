@@ -1,6 +1,6 @@
 # Money Elite v5.0
 
-Aggiornamento corrente: v5.0.1
+Aggiornamento corrente: v5.0.2
 
 Data: 6 agosto 2026
 
@@ -34,3 +34,4 @@ Data: 6 agosto 2026
 - Aggiunto un tastierino numerico interno per gli importi, con virgola, cancellazione e conferma colorata.
 - Il tastierino è utilizzato anche per pianificate, abbonamenti e trasferimenti.
 - La v5.0.1 forza una nuova pubblicazione degli asset e rende la stella dei modelli sempre presente nella testata delle categorie.
+- La v5.0.2 mostra il numero di versione direttamente nel contenuto dell'app, senza dipendere da regole grafiche.
