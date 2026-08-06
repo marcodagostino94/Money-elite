@@ -735,3 +735,10 @@ header h1{font-size:25px!important}
 .report-explorer .report-category-list>div{min-width:0}
 .report-explorer .report-category-list span{min-width:0;overflow-wrap:anywhere}
 .report-explorer .report-category-list b{flex:0 0 auto;white-space:nowrap}
+
+/* Loghi bancari forniti dall'utente per i conti contenitore. */
+.bank-logo-icon{display:block;max-width:100%;max-height:100%;object-fit:contain;border-radius:7px;background:#fff}
+.master-toggle>.item-icon:has(.bank-logo-icon){background:#fff!important;padding:4px;box-shadow:0 2px 9px #00000018!important}
+.master-toggle>.item-icon .bank-logo-icon{width:100%!important;height:100%!important}
+.bank-logo-choices button:has(.bank-logo-icon){width:48px;height:48px;padding:7px;background:#fff}
+.bank-logo-choices button:has(.bank-logo-icon).selected{border-color:#0787f5;box-shadow:0 0 0 2px #0787f522}

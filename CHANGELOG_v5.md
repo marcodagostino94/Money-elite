@@ -17,3 +17,9 @@ Data: 6 agosto 2026
 
 - Aggiornato il numero di versione a Money Elite v5.0.
 - Aggiunto il copyright di Marco D'Agostino.
+
+## Loghi dei conti contenitore
+
+- Aggiunti i loghi Revolut e Mediolanum forniti dall'utente.
+- Durante la creazione o modifica di un conto contenitore è possibile scegliere uno dei due loghi.
+- Il logo scelto sostituisce l'icona generica nella gerarchia dei conti.
