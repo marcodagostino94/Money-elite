@@ -742,3 +742,21 @@ header h1{font-size:25px!important}
 .master-toggle>.item-icon .bank-logo-icon{width:100%!important;height:100%!important}
 .bank-logo-choices button:has(.bank-logo-icon){width:48px;height:48px;padding:7px;background:#fff}
 .bank-logo-choices button:has(.bank-logo-icon).selected{border-color:#0787f5;box-shadow:0 0 0 2px #0787f522}
+
+/* Modelli nella scelta categoria e tastiera importi dedicata. */
+.category-picker-actions{display:flex;align-items:center;gap:7px}
+.category-picker-actions>button{width:38px;height:38px;border:0;border-radius:10px;background:transparent;display:grid;place-items:center;padding:0}
+.category-picker-actions .picker-template-trigger{color:#c58b10;background:#fff8e5;border:1px solid #f0d58f}
+.money-keypad-layer{position:fixed;inset:0;z-index:80;background:#17191d52;display:flex;align-items:flex-end;justify-content:center}
+.money-keypad{width:min(520px,100%);padding:12px 10px calc(12px + env(safe-area-inset-bottom));background:#dfe2e6;border-radius:20px 20px 0 0;box-shadow:0 -14px 45px #0004}
+.money-keypad-head{height:48px;display:grid;grid-template-columns:auto 1fr 48px;gap:10px;align-items:center;padding:0 6px 8px}
+.money-keypad-head span{font-size:13px;font-weight:800;color:#747980}.money-keypad-head strong{text-align:center;font-size:23px;font-variant-numeric:tabular-nums}.money-keypad-head button{height:40px;border:0;border-radius:9px;background:#fff;display:grid;place-items:center}
+.money-keypad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.money-keypad-grid>button{height:58px;border:0;border-radius:10px;background:#fff;font-size:25px;font-weight:650;box-shadow:0 1px 2px #0002}
+.money-keypad-grid .money-keypad-confirm{color:#fff;background:#0787f5}.money-keypad-grid .money-keypad-confirm.expense{background:#ef4438}.money-keypad-grid .money-keypad-confirm.income{background:#38a36f}.money-keypad-grid .money-keypad-confirm.transfer{background:#0787f5}
+@media(max-width:620px){
+  .keyboard-aware-picker{top:var(--picker-vv-top,0)!important;bottom:auto!important;height:var(--picker-vv-height,100dvh)!important;min-height:0!important}
+  .keyboard-aware-picker>.category-picker{position:absolute!important;inset:8px 10px!important;max-height:none!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden!important}
+  .keyboard-aware-picker .category-picker-title,.keyboard-aware-picker .category-search{flex:0 0 auto}
+  .keyboard-aware-picker .category-tree{flex:1 1 auto;min-height:72px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+}
