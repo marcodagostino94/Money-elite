@@ -1,6 +1,12 @@
-# Money Elite v6.0.0
+# Money Elite v6.0.1
 
 Versione 6 basata sulla versione 5.0.7 approvata.
+
+## Aggiornamento 6.0.1
+
+- I loghi Revolut e Mediolanum sono selezionabili anche per i conti operativi.
+- I loghi sono disponibili sia durante la creazione sia durante la modifica del conto.
+- Migliorata la visualizzazione dei loghi negli elenchi e nella Dashboard.
 
 ## Operazioni eseguite
 
