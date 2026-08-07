@@ -760,5 +760,7 @@ header h1{font-size:25px!important}
   .keyboard-aware-picker{position:fixed!important;inset:0!important;height:100dvh!important;min-height:0!important;display:flex!important;align-items:flex-end!important;justify-content:center!important;padding:0 18px calc(18px + env(safe-area-inset-bottom))!important}
   .keyboard-aware-picker>.category-picker{position:relative!important;inset:auto!important;width:100%!important;height:68dvh!important;max-height:650px!important;min-height:380px!important;display:flex;flex-direction:column;overflow:hidden!important;padding:13px!important}
   .keyboard-aware-picker .category-picker-title,.keyboard-aware-picker .category-search{flex:0 0 auto}
-  .keyboard-aware-picker .category-tree{flex:1 1 auto;min-height:72px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+  .keyboard-aware-picker{overscroll-behavior:none!important}
+  .keyboard-aware-picker .category-tree{flex:1 1 auto;min-height:72px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;overscroll-behavior:contain;touch-action:pan-y}
+  .modal:has(.keyboard-aware-picker){overflow:hidden!important;overscroll-behavior:none!important}
 }
