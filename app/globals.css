@@ -752,12 +752,13 @@ header h1{font-size:25px!important}
 .money-keypad-head{height:48px;display:grid;grid-template-columns:auto 1fr 48px;gap:10px;align-items:center;padding:0 6px 8px}
 .money-keypad-head span{font-size:13px;font-weight:800;color:#747980}.money-keypad-head strong{text-align:center;font-size:23px;font-variant-numeric:tabular-nums}.money-keypad-head button{height:40px;border:0;border-radius:9px;background:#fff;display:grid;place-items:center}
 .money-keypad-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.money-keypad-grid>button{height:58px;border:0;border-radius:10px;background:#fff;font-size:25px;font-weight:650;box-shadow:0 1px 2px #0002}
+.money-keypad-grid>button{height:58px;border:0;border-radius:10px;background:#fff;font-size:25px;font-weight:650;box-shadow:0 1px 2px #0002;display:grid;place-items:center;padding:0;line-height:1}
 .money-keypad button{touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}.money-keypad button:active{transform:scale(.97);background:#eef0f2}
+.money-keypad-confirm svg{display:block;margin:auto}
 .money-keypad-grid .money-keypad-confirm{color:#fff;background:#0787f5}.money-keypad-grid .money-keypad-confirm.expense{background:#ef4438}.money-keypad-grid .money-keypad-confirm.income{background:#38a36f}.money-keypad-grid .money-keypad-confirm.transfer{background:#0787f5}
 @media(max-width:620px){
-  .keyboard-aware-picker{top:0!important;bottom:auto!important;height:var(--picker-vv-height,100dvh)!important;min-height:0!important;align-items:flex-start!important;padding:8px 10px!important}
-  .keyboard-aware-picker>.category-picker{position:relative!important;inset:auto!important;width:100%!important;height:calc(var(--picker-vv-height,100dvh) - 16px)!important;max-height:680px!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden!important;padding:13px!important}
+  .keyboard-aware-picker{position:fixed!important;inset:0!important;height:100dvh!important;min-height:0!important;display:flex!important;align-items:flex-end!important;justify-content:center!important;padding:0 18px calc(18px + env(safe-area-inset-bottom))!important}
+  .keyboard-aware-picker>.category-picker{position:relative!important;inset:auto!important;width:100%!important;height:68dvh!important;max-height:650px!important;min-height:380px!important;display:flex;flex-direction:column;overflow:hidden!important;padding:13px!important}
   .keyboard-aware-picker .category-picker-title,.keyboard-aware-picker .category-search{flex:0 0 auto}
   .keyboard-aware-picker .category-tree{flex:1 1 auto;min-height:72px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
 }

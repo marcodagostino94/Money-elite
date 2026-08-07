@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -1140,7 +1140,7 @@ function ReportSectionInteractive({transactions,accounts,categories,recurrences,
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v5.0.3</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Pannello categorie stabile e tastierino importi corretto su iPhone.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v5.0.4</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Selettore categorie compatto e tastierino importi più fluido su iPhone.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1302,7 +1302,6 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [receivedValue,setReceivedValue]=useState(initial?.destinationAmount?amountInput(initial.destinationAmount):"");
   const [notesValue,setNotesValue]=useState(initial?.notes ?? "");
   const [categoryQuery, setCategoryQuery] = useState("");
-  const [categoryViewportHeight,setCategoryViewportHeight]=useState<number|null>(null);
   const [amountPadTarget,setAmountPadTarget]=useState<"amount"|"received"|null>(null);
   const [accountOpen, setAccountOpen] = useState(false);
   const [dateOpen, setDateOpen] = useState(false);
@@ -1318,7 +1317,6 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const [intervalCount, setIntervalCount] = useState(initial?.intervalCount ?? 1);
   const [occurrenceLimit, setOccurrenceLimit] = useState(initial?.occurrenceLimit ?? 0);
   useEffect(()=>{const refreshTemplates=()=>setTemplates(loadTransactionTemplates());refreshTemplates();window.addEventListener("money-elite-templates-changed",refreshTemplates);return()=>window.removeEventListener("money-elite-templates-changed",refreshTemplates)},[]);
-  useEffect(()=>{if(!categoryOpen||typeof window==="undefined"||!window.visualViewport)return;const viewport=window.visualViewport;const sync=()=>setCategoryViewportHeight(viewport.height);sync();viewport.addEventListener("resize",sync);return()=>viewport.removeEventListener("resize",sync)},[categoryOpen]);
   const isTransfer = kind === "transfer";
   const selectedCard = cards.find(card => card.id === selectedCardId);
   const sourceAccount=usableAccounts.find(account=>account.name===from);
@@ -1328,7 +1326,8 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
   const proposedReceived=(raw:string,source=sourceAccount,destination=destinationAccount)=>{const sent=Math.abs(parseItalianAmount(raw));if(!source||!destination)return sent;return sent/Math.max(source.exchangeRate||1,.00000001)*Math.max(destination.exchangeRate||1,.00000001)};
   const setSentAmount=(value:string)=>{setAmountValue(value);if(isTransfer)setReceivedValue(amountInput(proposedReceived(value)))};
   const openAmountPad=(target:"amount"|"received",event:React.PointerEvent<HTMLInputElement>)=>{if(typeof window!=="undefined"&&window.matchMedia("(max-width: 620px)").matches){event.preventDefault();event.currentTarget.blur();setAmountPadTarget(target)}};
-  const pressAmountKey=(key:string)=>{if(!amountPadTarget)return;const current=amountPadTarget==="amount"?amountValue:receivedValue;let next=current;if(key==="backspace")next=current.slice(0,-1);else if(key===","){if(!current.includes(",")&&!current.includes("."))next=`${current||"0"},`}else if(/^\d$/.test(key)){const decimal=(current.split(/[,.]/)[1]||"");if((!current.includes(",")&&!current.includes("."))||decimal.length<2)next=current==="0"?key:`${current}${key}`}if(amountPadTarget==="amount")setSentAmount(next);else setReceivedValue(next)};
+  const nextAmountValue=(current:string,key:string)=>{if(key==="backspace")return current.slice(0,-1);if(key===",")return !current.includes(",")&&!current.includes(".")?`${current||"0"},`:current;if(/^\d$/.test(key)){const decimal=(current.split(/[,.]/)[1]||"");if((current.includes(",")||current.includes("."))&&decimal.length>=2)return current;return current==="0"?key:`${current}${key}`}return current};
+  const pressAmountKey=(key:string)=>{if(amountPadTarget==="amount")setAmountValue(current=>{const next=nextAmountValue(current,key);if(isTransfer)setReceivedValue(amountInput(proposedReceived(next)));return next});else if(amountPadTarget==="received")setReceivedValue(current=>nextAmountValue(current,key))};
   useEffect(()=>{if(isTransfer&&!initial?.destinationAmount)setReceivedValue(amountInput(proposedReceived(amountValue)))},[from,to]);
   const isMealVoucher = mealVoucherLeaf(selectedCategory);
   const pickerKind = refundSource ? "expense" : kind === "income" ? "income" : "expense";
@@ -1389,7 +1388,7 @@ function TransactionModal({ kind, close, add, accounts, cards, categories, prese
     </div>}
     {!isTransfer&&<label>Note<textarea name="notes" rows={3} value={notesValue} onChange={event=>setNotesValue(event.target.value)} placeholder="Aggiungi una nota (opzionale)"/></label>}
     <div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className={`save-action ${kind}`}>{refundSource?"Salva rimborso":labels.save}</button></div>
-    {categoryOpen && <div className="picker-dim-layer keyboard-aware-picker" style={categoryViewportHeight?{"--picker-vv-height":`${categoryViewportHeight}px`} as CSSProperties:undefined} onMouseDown={()=>setCategoryOpen(false)}><div className="category-picker" onMouseDown={event=>event.stopPropagation()}>
+    {categoryOpen && <div className="picker-dim-layer keyboard-aware-picker" onMouseDown={()=>setCategoryOpen(false)}><div className="category-picker" onMouseDown={event=>event.stopPropagation()}>
       <div className="category-picker-title"><div><small>SELEZIONA CATEGORIA</small><h3>Categoria e sottocategoria</h3></div><div className="category-picker-actions"><button type="button" className="template-trigger picker-template-trigger" onClick={()=>{setCategoryOpen(false);setTemplateOpen(true)}} aria-label="Apri modelli" title="Modelli"><AppIcon name="star" size={21}/></button><button type="button" onClick={()=>setCategoryOpen(false)} aria-label="Chiudi"><AppIcon name="close" size={21}/></button></div></div>
       <div className="category-search"><AppIcon name="search" size={15}/><input enterKeyHint="search" value={categoryQuery} onChange={event=>setCategoryQuery(event.target.value)} placeholder="Cerca categoria..." /></div>
       <div className="category-tree">
