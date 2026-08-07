@@ -764,4 +764,5 @@ header h1{font-size:25px!important}
   .keyboard-aware-picker{overscroll-behavior:none!important}
   .keyboard-aware-picker .category-tree{flex:1 1 auto;min-height:72px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px;overscroll-behavior:contain;touch-action:pan-y}
   .modal:has(.keyboard-aware-picker){overflow:hidden!important;overscroll-behavior:none!important}
+  .modal.category-lock-active{overflow:hidden!important;overscroll-behavior:none!important}
 }
