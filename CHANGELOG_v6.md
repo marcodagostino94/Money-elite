@@ -1,6 +1,13 @@
-# Money Elite v6.0.1
+# Money Elite v6.0.2
 
 Versione 6 basata sulla versione 5.0.7 approvata.
+
+## Aggiornamento 6.0.2
+
+- Corretto il pulsante Salva modello.
+- La finestra si chiude dopo il salvataggio riuscito.
+- Se manca un dato obbligatorio viene mostrato un messaggio preciso.
+- Gestiti gli eventuali errori della memoria locale senza lasciare la finestra bloccata.
 
 ## Aggiornamento 6.0.1
 
