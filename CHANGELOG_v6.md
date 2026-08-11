@@ -1,6 +1,22 @@
-# Money Elite v6.1.2
+# Money Elite v6.2.0
 
 Versione 6 basata sulla versione 5.0.7 approvata.
+
+## Aggiornamento 6.2.0
+
+- Aggiunta la modifica dei budget esistenti.
+- È possibile cambiare categoria e importo del budget mensile.
+- Ogni card budget apre ora il dettaglio del mese.
+- Il dettaglio mostra tutte le uscite e tutti i rimborsi usati per calcolare la spesa netta.
+- Aggiunti pulsanti diretti per modificare, eliminare o consultare le transazioni del budget.
+
+## Aggiornamento 6.1.3
+
+- Aggiunta l’azione “Estingui carta” nel menu della carta di credito.
+- L’estinzione è consentita soltanto quando il debito residuo è pari a zero.
+- Le carte estinte spariscono dall’elenco attivo ma conservano tutte le operazioni storiche.
+- Aggiunto l’elenco richiudibile “Carte estinte” per consultare lo storico in sola lettura.
+- Rimborsi e accrediti sulla carta riducono correttamente il debito residuo.
 
 ## Aggiornamento 6.1.2
 
