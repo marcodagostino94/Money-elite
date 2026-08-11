@@ -306,9 +306,12 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
   // A planned transaction is only a forecast until the user confirms it.
   // Pending/future planned rows must never alter real account balances.
   const effectiveTransactions = transactions.filter(transaction => !transaction.dueDate || Boolean(transaction.confirmedAt));
+  // Purchases made with a credit card belong to the card ledger. The linked
+  // bank account is affected only by an explicit card repayment.
+  const accountEffectiveTransactions = effectiveTransactions.filter(transaction => !transaction.cardId || transaction.kind === "card_repayment");
 
   const accounts: MoneyAccount[] = (rawAccounts ?? []).map(row => {
-    const relevant = effectiveTransactions.filter(transaction => transaction.accountId === row.id || transaction.destinationAccountId === row.id);
+    const relevant = accountEffectiveTransactions.filter(transaction => transaction.accountId === row.id || transaction.destinationAccountId === row.id);
     const delta = relevant.reduce((sum, transaction) => {
       if (transaction.kind === "transfer") {
         if (transaction.accountId === row.id) return sum - transaction.amount;

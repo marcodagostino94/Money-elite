@@ -1,6 +1,33 @@
-# Money Elite v6.0.2
+# Money Elite v6.1.2
 
 Versione 6 basata sulla versione 5.0.7 approvata.
+
+## Aggiornamento 6.1.2
+
+- Le spese delle carte di credito sono visibili soltanto nella sezione Carte e nel dettaglio della relativa carta.
+- Le spese delle carte non compaiono nelle transazioni recenti della Dashboard né nell’elenco generale Transazioni.
+- Il conto collegato mostra soltanto il pagamento effettivo del debito della carta.
+- I budget calcolano ora la spesa netta sottraendo i rimborsi.
+- Il ricalcolo vale anche per i budget assegnati a una categoria principale con relative sottocategorie.
+- Gli avvisi di raggiungimento e superamento budget considerano anch’essi i rimborsi già registrati.
+
+## Aggiornamento 6.1.1
+
+- Le spese effettuate con carta di credito non compaiono più nei movimenti del conto bancario collegato.
+- Le spese della carta non modificano direttamente il saldo del conto collegato.
+- Il conto viene movimentato soltanto quando viene registrato il pagamento della carta.
+- Corretto il calcolo del ciclo corrente quando la data odierna precede il giorno di inizio ciclo.
+- La percentuale di utilizzo considera ora le spese del ciclo realmente in corso.
+
+## Aggiornamento 6.1.0
+
+- Aggiunto in Report il nuovo pannello “Per categoria”.
+- Selezione visuale di categorie e sottocategorie con simboli e colori, senza menu a tendina.
+- Periodi disponibili: mese corrente, ultimi 3, 6 o 12 mesi.
+- Filtri per tutti i movimenti, entrate oppure uscite.
+- Riepilogo di entrate, uscite, saldo e numero di transazioni.
+- Grafico mensile e pulsante per visualizzare tutte le transazioni della categoria nel periodo scelto.
+- Nessuna modifica a saldi, patrimonio, transazioni o database.
 
 ## Aggiornamento 6.0.2
 
