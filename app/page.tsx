@@ -1186,7 +1186,7 @@ function ReportSectionInteractive({transactions,accounts,categories,recurrences,
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite v6.2.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Aggiunte modifica e consultazione dettagliata delle transazioni per ogni budget.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite versione 7.0.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Versione 7 completa con le funzioni approvate e gli ultimi aggiornamenti su carte, budget, report e rimborsi.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1767,7 +1767,8 @@ export default function Home() {
     if(!selectedTransaction) return;
     const original = selectedTransaction;
     setSelectedTransaction(null);
-    setModal({kind:"income",preset:"normal",defaultAccount:original.account,initial:{...original,id:crypto.randomUUID(),amount:Math.abs(original.amount),accounted:false},refundSource:original});
+    const today=toIsoDate(new Date());
+    setModal({kind:"income",preset:"normal",defaultAccount:original.account,initial:{...original,id:crypto.randomUUID(),amount:Math.abs(original.amount),dateISO:today,date:formatItalianDate(today),accounted:false},refundSource:original});
   };
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();

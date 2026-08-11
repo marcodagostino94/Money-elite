@@ -1,6 +1,20 @@
-# Money Elite v6.2.0
+# Money Elite versione 7.0.0
 
-Versione 6 basata sulla versione 5.0.7 approvata.
+Release principale che consolida tutte le funzioni e le correzioni approvate fino alla versione 6.2.1.
+
+## Versione 7.0.0
+
+- Nuova release pulita denominata `Money Elite versione 7`.
+- Conservate tutte le funzioni approvate di conti, carte, budget, report, modelli, pianificate e multivaluta.
+- Inclusi gli ultimi interventi su carte di credito, rimborsi, budget netti e report per categoria.
+- Aggiornati numero di versione, Informazioni, README, changelog e metadati del progetto.
+- Escluse dal pacchetto finale cache, build locali, dipendenze e file non necessari.
+
+## Aggiornamento 6.2.1
+
+- Un nuovo rimborso usa automaticamente la data odierna invece della data della spesa originale.
+- La data resta modificabile manualmente prima del salvataggio.
+- Categoria, conto, importo e collegamento alla spesa originale restano precompilati come prima.
 
 ## Aggiornamento 6.2.0
 
@@ -62,7 +76,7 @@ Versione 6 basata sulla versione 5.0.7 approvata.
 
 - Nessuna modifica alle funzioni o alla grafica approvate.
 - Versione applicazione aggiornata a 6.0.0.
-- Cartella principale rinominata in `Money Elite v6`.
+- La precedente cartella principale era denominata `Money Elite v6`.
 - Rimossi cache di compilazione, build esportate e copie di versioni precedenti.
 - Rimosse le icone dimostrative di Next.js non utilizzate dall'app.
 - Conservati codice sorgente, loghi bancari, icona dell'app, immagine social, configurazione GitHub e file Supabase.
