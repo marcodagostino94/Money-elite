@@ -1,6 +1,11 @@
-# Money Elite versione 7.0.0
+# Money Elite versione 7.0.1
 
 Release principale che consolida tutte le funzioni e le correzioni approvate fino alla versione 6.2.1.
+
+## Versione 7.0.1
+
+- Corretta l’icona della categoria “Mare”.
+- Sostituito l’aereo con il simbolo delle onde del mare in tutte le sezioni dell’app.
 
 ## Versione 7.0.0
 

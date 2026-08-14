@@ -324,7 +324,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   music:L.Music2,furniture:L.Sofa,car:L.CarFront,coffee:L.Coffee,package:L.Package,hammer:L.Hammer,
   health:L.HeartPulse,medical:L.Pill,travel:L.Plane,fuel:L.Fuel,clothes:L.Shirt,technology:L.Smartphone,
   finance:L.BadgeEuro,trash:L.Trash2,archive:L.Archive,edit:L.Pencil,building:L.Building2,parking:L.CircleParking,
-  flame:L.Flame,light:L.Lightbulb,cleaning:L.SprayCan,bike:L.Bike,bus:L.BusFront,beach:L.Umbrella,
+  flame:L.Flame,light:L.Lightbulb,cleaning:L.SprayCan,bike:L.Bike,bus:L.BusFront,beach:L.Umbrella,sea:L.Waves,
   cinema:L.Clapperboard,fun:L.Sparkles,tax:L.ReceiptText,sport:L.Dumbbell,more:L.MoreHorizontal,
   plus:L.Plus,close:L.X,back:L.ArrowLeft,forward:L.ChevronRight,search:L.Search,calendar:L.CalendarDays,logout:L.LogOut,
   pause:L.Pause,play:L.Play,copy:L.Copy,info:L.Info,cigarette:L.Cigarette,drink:L.Martini,perfume:L.SprayCan,
@@ -350,7 +350,7 @@ const categoryIcon = (name: string) => {
     "Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"drink",
     "Farmacia":"medical","Finanziamenti":"finance","Gas":"flame","Giardino":"home","Guadagni":"income",
     "Hotel":"building","iCloud":"cloud","Lavori":"hammer","Lenti a contatto":"eye","Luce":"light",
-    "Luce e Gas":"energy","Mare":"travel","Medici":"stethoscope","Multe":"justice","Noleggio":"car",
+    "Luce e Gas":"energy","Mare":"sea","Medici":"stethoscope","Multe":"justice","Noleggio":"car",
     "Parcheggio":"parking","Pranzi/Cene":"food","Pranzi/Cene Viaggi":"food","Prodotti Casa":"home",
     "Proventi Finanziari":"finance","Pulizie":"cleaning","Reddito":"income","Regali":"gift","Regalo":"gift",
     "Rifiuti":"trash","Rimborso":"refund","Riscaldamento":"flame","Salute":"health","Scommesse":"betting",
@@ -1186,7 +1186,7 @@ function ReportSectionInteractive({transactions,accounts,categories,recurrences,
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite versione 7.0.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Versione 7 completa con le funzioni approvate e gli ultimi aggiornamenti su carte, budget, report e rimborsi.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite versione 7.0.1</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Corretta l’icona della categoria Mare con il simbolo delle onde.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };

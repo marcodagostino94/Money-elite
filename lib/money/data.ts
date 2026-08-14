@@ -111,7 +111,7 @@ const seededChildIcons: Record<string, string> = {
   "Automobile":"car","Bar":"coffee","Box":"home","Buoni pasto":"voucher","Carburante":"fuel","Cinema":"cinema","Condominio":"building",
   "Cosmesi":"health","Cura Personale":"health","Discoteca":"music","Divertimento":"fun","Divertimento Viaggi":"fun","Drink":"coffee","Interessi maturati":"finance",
   "Farmacia":"medical","Finanziamenti":"finance","Gas":"flame","Giardino":"home","Hotel":"building","iCloud":"cloud","Lavori":"hammer",
-  "Lenti a contatto":"eye","Luce":"light","Luce e Gas":"energy","Mare":"beach","Medici":"stethoscope","Multe":"tax","Noleggio":"car",
+  "Lenti a contatto":"eye","Luce":"light","Luce e Gas":"energy","Mare":"sea","Medici":"stethoscope","Multe":"tax","Noleggio":"car",
   "Parcheggio":"parking","Pranzi/Cene":"food","Pranzi/Cene Viaggi":"food","Prodotti Casa":"home","Pulizie":"cleaning","Regali":"gift",
   "Regalo":"gift","Rifiuti":"trash","Rimborso":"refund","Riscaldamento":"flame","Scommesse":"fun","Scooter":"bike","Sky e Netflix":"streaming",
   "Spotify":"music","Sport":"sport","Stipendio":"finance","Straordinari":"clock","Supermercato":"groceries","Tabacchi":"circle","Tasse":"tax",
