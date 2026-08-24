@@ -1,6 +1,17 @@
-# Money Elite versione 7.0.1
+# Money Elite versione 8.0.0
 
 Release principale che consolida tutte le funzioni e le correzioni approvate fino alla versione 6.2.1.
+
+## Versione 8.0.0
+
+- Uniformati i colori delle transazioni alle rispettive categorie principali.
+- Ogni sottocategoria conserva in tutti gli elenchi lo stesso colore della propria categoria.
+- Corretta la visualizzazione delle transazioni già salvate, comprese quelle della sottocategoria Bar.
+- Aggiunto il filtro `NC` nelle Transazioni generali.
+- Aggiunto il filtro `NC` nei movimenti di ogni singolo conto.
+- Il filtro è disattivo per impostazione predefinita e mostra soltanto le transazioni non contabilizzate quando viene attivato.
+- Una transazione contabilizzata scompare immediatamente dall’elenco filtrato.
+- Nuova release pulita denominata `Money Elite versione 8`.
 
 ## Versione 7.0.1
 

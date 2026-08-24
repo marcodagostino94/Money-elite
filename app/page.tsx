@@ -302,7 +302,7 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     exchangeRate: row.exchangeRate,
     icon: category ? categoryVisual(category).icon : (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
     color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" ? "blue" : "orange",
-    categoryColor: category?.color || (row.kind === "transfer" ? "#729ac5" : row.kind === "income" || row.kind === "refund" ? "#559476" : "#c9716c"),
+    categoryColor: category ? categoryVisual(parent || category).color : (row.kind === "transfer" ? "#729ac5" : row.kind === "income" || row.kind === "refund" ? "#559476" : "#c9716c"),
     accounted: Boolean(row.accountedAt),
     isRefund: row.kind === "refund",
     refundOf: row.refundOfId ?? undefined,
@@ -863,6 +863,7 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailMonth, setDetailMonth] = useState(monthKeyFromDate(new Date()));
   const [archivedOpen,setArchivedOpen]=useState(false);
+  const [nonAccountedOnly,setNonAccountedOnly]=useState(false);
   const [openContainers,setOpenContainers]=useState<Set<string>>(()=>new Set(accounts.filter(account=>account.isContainer).map(account=>account.id)));
   const rawActiveAccounts = accounts.filter(account=>!account.archived);
   const operationalAccounts = rawActiveAccounts.filter(account=>!account.isContainer);
@@ -874,10 +875,11 @@ function AccountsSectionReal({ onAdd, accounts, transactions, onSaveAccount, onT
     const accountTransactions = transactions.filter(transaction=>isEffectiveTransaction(transaction) && (!transaction.cardId || transaction.kind==="card_repayment") && (transaction.accountId===detail.id || transaction.destinationAccountId===detail.id));
     const rows = accountTransactions
       .filter(transaction=>dateInMonth(transaction.dateISO, detailMonth))
+      .filter(transaction=>!nonAccountedOnly || transaction.accounted===false)
       .map(transaction=>transaction.kind==="transfer" ? {...transaction, currency:detail.currency, amount: transaction.destinationAccountId===detail.id ? Math.abs(transaction.destinationAmount??transaction.amount) : -Math.abs(transaction.amount)} : transaction);
     return <section className="section-page">
       <div className="inner-page-header compact-account-header"><button aria-label="Torna ai conti" onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>CONTO</small><h2>{detail.name}</h2></div></div>
-      <div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(detailMonth)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}><AppIcon name="forward" size={18}/></button></div>
+      <div className="account-transaction-filters"><div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(detailMonth)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setDetailMonth(month=>shiftMonthKey(month,1))}><AppIcon name="forward" size={18}/></button></div><button type="button" className={`nc-filter ${nonAccountedOnly?"active":""}`} aria-pressed={nonAccountedOnly} title="Mostra solo le transazioni non contabilizzate" onClick={()=>setNonAccountedOnly(value=>!value)}>NC</button></div>
       <div className="account-compact-summary"><span>Saldo ad oggi</span><strong>{accountMoney(detail.balance,detail.currency)}</strong><small>{rows.length} {rows.length===1?"movimento":"movimenti"}{detail.type==="meal_vouchers"?` · ${detail.voucherCount} buoni`:""}</small></div>
       <article className="panel month-transactions">{rows.length?rows.map(transaction=><TransactionRow key={transaction.id} t={transaction} onOpen={openTransaction}/>):<div className="empty">Nessuna transazione in {monthLabel(detailMonth)}.</div>}</article>
       {!detail.archived&&<QuickActions openAction={kind=>onAdd(kind,detail.name)}/>}</section>;
@@ -1186,7 +1188,7 @@ function ReportSectionInteractive({transactions,accounts,categories,recurrences,
 }
 
 function InformationSection() {
-  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite versione 7.0.1</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Corretta l’icona della categoria Mare con il simbolo delle onde.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
+  return <section className="section-page information-page"><div className="information-hero"><img src={assetPath("/money-elite-icon.png")} alt="Money Elite"/><div><small>VERSIONE ATTUALE</small><h2>Money Elite versione 8.0.0</h2><p>Gestione personale di conti, transazioni, pianificate, abbonamenti, carte e budget.</p></div></div><div className="information-grid"><article className="panel"><AppIcon name="check"/><div><h3>Dati protetti</h3><p>I dati personali sono separati per utente e sincronizzati tramite Supabase.</p></div></article><article className="panel"><AppIcon name="cloud"/><div><h3>Sincronizzazione</h3><p>L'app aggiorna automaticamente movimenti, conti, ricorrenze e modelli tra i dispositivi.</p></div></article><article className="panel"><AppIcon name="technology"/><div><h3>Compatibilità</h3><p>Interfaccia ottimizzata per iPhone, desktop e installazione come web app.</p></div></article><article className="panel"><AppIcon name="info"/><div><h3>Note sulla versione</h3><p>Uniformati i colori delle categorie e aggiunto il filtro NC per le transazioni non contabilizzate.</p></div></article><article className="panel copyright-card"><AppIcon name="info"/><div><h3>Copyright</h3><p>© 2026 Marco D'Agostino. Tutti i diritti riservati.</p></div></article></div></section>;
 }
 
 type ManagedCategory = { id: string; name: string; type: "Entrata" | "Uscita"; children: string[] };
@@ -1323,12 +1325,13 @@ function TransactionsSection({ transactions, openTransaction }: { transactions: 
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [month, setMonth] = useState(monthKeyFromDate(new Date()));
+  const [nonAccountedOnly,setNonAccountedOnly]=useState(false);
   const visibleTransactions=useMemo(()=>transactions.filter(t=>t.kind!=="transfer"),[transactions]);
   const filtered = useMemo(() => visibleTransactions.filter(t => {
     const text=`${t.label} ${t.category} ${t.account} ${t.notes ?? ""}`.toLowerCase();
-    return text.includes(query.toLowerCase()) && dateInMonth(t.dateISO,month);
-  }), [visibleTransactions, query, month]);
-  return <section className="section-page"><article className="panel full-list compact-transaction-list"><div className="transactions-toolbar"><div className={`compact-search ${searchOpen?"is-open":""}`}><button aria-label={searchOpen?"Chiudi ricerca":"Cerca transazione"} title={searchOpen?"Chiudi ricerca":"Cerca transazione"} onClick={()=>{setSearchOpen(value=>!value);if(searchOpen)setQuery("")}}><AppIcon name={searchOpen?"close":"search"} size={18}/></button>{searchOpen&&<input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca..." />}</div><div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setMonth(value=>shiftMonthKey(value,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(month)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setMonth(value=>shiftMonthKey(value,1))}><AppIcon name="forward" size={18}/></button></div></div>{filtered.map(t=><TransactionRow t={t} key={t.id} onOpen={openTransaction}/>)}{!filtered.length && <div className="empty">Nessuna transazione trovata in {monthLabel(month)}.</div>}</article></section>;
+    return text.includes(query.toLowerCase()) && dateInMonth(t.dateISO,month) && (!nonAccountedOnly || t.accounted===false);
+  }), [visibleTransactions, query, month, nonAccountedOnly]);
+  return <section className="section-page"><article className="panel full-list compact-transaction-list"><div className="transactions-toolbar"><div className={`compact-search ${searchOpen?"is-open":""}`}><button aria-label={searchOpen?"Chiudi ricerca":"Cerca transazione"} title={searchOpen?"Chiudi ricerca":"Cerca transazione"} onClick={()=>{setSearchOpen(value=>!value);if(searchOpen)setQuery("")}}><AppIcon name={searchOpen?"close":"search"} size={18}/></button>{searchOpen&&<input autoFocus value={query} onChange={e=>setQuery(e.target.value)} placeholder="Cerca..." />}</div><div className="period-nav icon-period-nav"><button aria-label="Mese precedente" title="Mese precedente" onClick={()=>setMonth(value=>shiftMonthKey(value,-1))}><AppIcon name="back" size={18}/></button><strong>{monthLabel(month)}</strong><button aria-label="Mese successivo" title="Mese successivo" onClick={()=>setMonth(value=>shiftMonthKey(value,1))}><AppIcon name="forward" size={18}/></button></div><button type="button" className={`nc-filter ${nonAccountedOnly?"active":""}`} aria-pressed={nonAccountedOnly} title="Mostra solo le transazioni non contabilizzate" onClick={()=>setNonAccountedOnly(value=>!value)}>NC</button></div>{filtered.map(t=><TransactionRow t={t} key={t.id} onOpen={openTransaction}/>)}{!filtered.length && <div className="empty">{nonAccountedOnly?`Nessuna transazione non contabilizzata in ${monthLabel(month)}.`:`Nessuna transazione trovata in ${monthLabel(month)}.`}</div>}</article></section>;
 }
 
 function TransactionModal({ kind, close, add, accounts, cards, categories, preset = "normal", defaultAccount, cardId, initial, editing = false, refundSource }: { kind: ActionKind; close: () => void; add: (t: Transaction) => void | Promise<void>; accounts: MoneyAccount[]; cards: MoneyCard[]; categories: MoneyCategory[]; preset?: "normal" | "planned" | "subscription"; defaultAccount?: string; cardId?: string; initial?: Transaction; editing?: boolean; refundSource?: Transaction }) {
@@ -1689,7 +1692,9 @@ export default function Home() {
       accounted_at: transaction.accounted ? new Date().toISOString() : null,
       notes: transaction.notes?.trim() || null,
     };
-    const optimisticTransaction:Transaction={...transaction,accountId:account.id,categoryId:category?.id??null,dateISO:transaction.dateISO??toIsoDate(new Date()),date:formatItalianDate(transaction.dateISO??toIsoDate(new Date())),confirmedAt:transaction.planned?null:new Date().toISOString(),dueDate:transaction.planned?(transaction.dateISO??toIsoDate(new Date())):null,accounted:Boolean(transaction.accounted)};
+    const visualParent=category?.parentId?categories.find(item=>item.id===category.parentId):null;
+    const optimisticVisual=category?categoryVisual(visualParent||category):null;
+    const optimisticTransaction:Transaction={...transaction,accountId:account.id,categoryId:category?.id??null,icon:category?categoryVisual(category).icon:transaction.icon,categoryColor:optimisticVisual?.color??transaction.categoryColor,dateISO:transaction.dateISO??toIsoDate(new Date()),date:formatItalianDate(transaction.dateISO??toIsoDate(new Date())),confirmedAt:transaction.planned?null:new Date().toISOString(),dueDate:transaction.planned?(transaction.dateISO??toIsoDate(new Date())):null,accounted:Boolean(transaction.accounted)};
     setTransactions(current=>modal?.editing?current.map(item=>item.id===transaction.id?optimisticTransaction:item):[optimisticTransaction,...current]);
     setModal(null);
     const result = modal?.editing
