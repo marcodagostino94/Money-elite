@@ -1,6 +1,15 @@
-# Money Elite versione 8.0.0
+# Money Elite versione 9.0.0
 
-Release principale che consolida tutte le funzioni e le correzioni approvate fino alla versione 6.2.1.
+Release principale che consolida tutte le funzioni e le correzioni approvate fino alla versione 9.0.0.
+
+## Versione 9.0.0
+
+- L'ammontare dovuto generale delle carte include tutti i cicli non ancora ripagati.
+- La card di ogni carta continua a mostrare separatamente il debito e l'utilizzo del ciclo corrente.
+- Il dettaglio del ciclo conserva la navigazione e il totale del periodo selezionato.
+- L'azione “Ripaga” propone il debito complessivo residuo della carta, inclusi i cicli precedenti.
+- Rimborsi e ripagamenti già registrati riducono il debito complessivo una sola volta.
+- Nuova release pulita denominata `Money Elite versione 9`.
 
 ## Versione 8.0.0
 
