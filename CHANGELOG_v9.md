@@ -10,6 +10,11 @@ Release principale che consolida tutte le funzioni e le correzioni approvate fin
 - L'azione “Ripaga” propone il debito complessivo residuo della carta, inclusi i cicli precedenti.
 - Rimborsi e ripagamenti già registrati riducono il debito complessivo una sola volta.
 - Nuova release pulita denominata `Money Elite versione 9`.
+- L'ammontare dovuto generale comprende soltanto i cicli conclusi e non ancora ripagati, calcolati usando il giorno di inizio configurato per ciascuna carta.
+- Il giorno di pagamento resta specifico per ogni carta e non è fissato a una data predefinita.
+- Il ripagamento è registrato come trasferimento verso la carta: riduce il conto e il debito senza creare una nuova spesa nei grafici, nei budget o nei report.
+- “Ripaga” esclude sempre il ciclo ancora aperto e permette di usare soltanto conti correnti principali.
+- Esclusi dal ripagamento contenitori, Pocket, conti deposito e buoni pasto.
 
 ## Versione 8.0.0
 

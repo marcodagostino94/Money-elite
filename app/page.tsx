@@ -283,7 +283,7 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     id: row.id,
     label: row.kind === "transfer" ? "Giroconto" : row.kind === "refund" ? `${titleBase} (Rimborso)` : titleBase,
     category: categoryLabel,
-    account: card?.name ?? account?.name ?? "Conto archiviato",
+    account: row.kind === "card_repayment" ? account?.name ?? "Conto archiviato" : card?.name ?? account?.name ?? "Conto archiviato",
     notes: row.notes ?? "",
     destinationAccountName: destinationAccount?.name ?? null,
     accountId: row.accountId,
@@ -300,9 +300,9 @@ const transactionFromDatabase = (row: MoneyTransaction, accounts: MoneyAccount[]
     destinationCurrency: destinationAccount?.currency || null || undefined,
     destinationAmount: row.destinationAmount,
     exchangeRate: row.exchangeRate,
-    icon: category ? categoryVisual(category).icon : (row.kind === "transfer" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
-    color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" ? "blue" : "orange",
-    categoryColor: category ? categoryVisual(parent || category).color : (row.kind === "transfer" ? "#729ac5" : row.kind === "income" || row.kind === "refund" ? "#559476" : "#c9716c"),
+    icon: category ? categoryVisual(category).icon : (row.kind === "transfer" || row.kind === "card_repayment" ? "transfer" : row.kind === "refund" ? "refund" : row.kind === "income" ? "income" : "expense"),
+    color: row.kind === "income" || row.kind === "refund" ? "green" : row.kind === "transfer" || row.kind === "card_repayment" ? "blue" : "orange",
+    categoryColor: category ? categoryVisual(parent || category).color : (row.kind === "transfer" || row.kind === "card_repayment" ? "#247ee8" : row.kind === "income" || row.kind === "refund" ? "#559476" : "#c9716c"),
     accounted: Boolean(row.accountedAt),
     isRefund: row.kind === "refund",
     refundOf: row.refundOfId ?? undefined,
@@ -748,18 +748,21 @@ function QuickActions({ openAction, allowTransfer = true, plannedLabels = false 
   </div>
 }
 
-function TransactionRow({ t, onOpen }: { t: Transaction; onOpen?: (t: Transaction) => void }) {
+function TransactionRow({ t, onOpen, cardView = false }: { t: Transaction; onOpen?: (t: Transaction) => void; cardView?: boolean }) {
   const categoryTitle = t.category.replace(/^Rimborso\s*[·:-]?\s*/i, "").split("›").at(-1)?.trim() || "Senza categoria";
-  const title = t.kind === "transfer" ? "Giroconto" : `${categoryTitle}${t.isRefund ? " (Rimborso)" : ""}`;
-  const subtitle = t.kind === "transfer"
+  const title = t.kind === "card_repayment" ? "Ripagamento carta" : t.kind === "transfer" ? "Giroconto" : `${categoryTitle}${t.isRefund ? " (Rimborso)" : ""}`;
+  const subtitle = t.kind === "card_repayment"
+    ? cardView ? `Accredito ricevuto da ${t.account}` : `Trasferimento dal conto per il pagamento della carta${t.notes?.trim() ? ` • ${t.notes.trim()}` : ""}`
+    : t.kind === "transfer"
     ? `Trasferimento tra conti: ${t.account} → ${t.destinationAccountName || "Conto destinazione"}`
     : `${t.account}${t.notes?.trim() ? ` • ${t.notes.trim()}` : ""}`;
+  const displayAmount = cardView && t.kind === "card_repayment" ? Math.abs(t.amount) : t.amount;
   return (
     <button type="button" className={`transaction-row ${onOpen?"clickable":""}`} onClick={()=>onOpen?.(t)}>
       <div className={`transaction-icon ${t.color}`} style={{color:t.categoryColor||undefined,background:t.categoryColor?`${t.categoryColor}18`:undefined}}><AppIcon name={t.icon}/>{t.accounted === false && <i className="unaccounted" title="Da contabilizzare">?</i>}</div>
       <div className="transaction-info"><b>{title}</b><span>{subtitle}</span></div>
-      <div className="transaction-amount"><b className={t.amount > 0 ? "positive" : ""}>{t.amount > 0 ? "+" : ""}{accountMoney(t.amount,t.currency)}</b>{t.kind==="transfer"&&t.destinationAmount&&<small>→ {accountMoney(t.destinationAmount,t.destinationCurrency)}</small>}<span>{t.date}</span></div>
-      <i className={`transaction-direction-line ${t.kind==="transfer"?"transfer":t.amount>=0?"income":"expense"}`} aria-hidden="true"/>
+      <div className="transaction-amount"><b className={displayAmount > 0 ? "positive" : ""}>{displayAmount > 0 ? "+" : ""}{accountMoney(displayAmount,t.currency)}</b>{t.kind==="transfer"&&t.destinationAmount&&<small>→ {accountMoney(t.destinationAmount,t.destinationCurrency)}</small>}<span>{t.date}</span></div>
+      <i className={`transaction-direction-line ${t.kind==="transfer"||t.kind==="card_repayment"&&!cardView?"transfer":displayAmount>=0?"income":"expense"}`} aria-hidden="true"/>
     </button>
   );
 }
@@ -955,9 +958,30 @@ function CreditCardsSection({ onAdd, cards, accounts, transactions, refresh, ope
     const {start,end}=cardCycleBounds(monthKey,card.cycleStartDay??1);
     return transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id && Boolean(t.dateISO) && t.dateISO! >= start && t.dateISO! <= end);
   };
-  const debtFromRows = (rows: Transaction[]) => rows.reduce((sum,t)=>sum+(t.kind==="card_repayment"||t.kind==="refund"||t.isRefund||t.amount>0?-Math.abs(t.amount):Math.abs(t.amount)),0);
-  const debtFor = (card: MoneyCard) => debtFromRows(cycleRowsFor(card,currentCardCycleMonth(card)));
-  const totalDebtFor = (card: MoneyCard) => Math.max(0,debtFromRows(transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id)));
+  const chargeDebtFromRows = (rows: Transaction[]) => rows.reduce((sum,t)=>t.kind==="expense"?sum+Math.abs(t.amount):t.kind==="refund"||t.isRefund?sum-Math.abs(t.amount):sum,0);
+  const cycleDebtFor = (card: MoneyCard, monthKey: string) => {
+    if(card.periodType==="no_period")return Math.max(0,chargeDebtFromRows(transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id)));
+    const {start,end}=cardCycleBounds(monthKey,card.cycleStartDay??1);
+    const cardRows=transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id);
+    const byId=new Map(cardRows.map(t=>[t.id,t]));
+    const belongsToCycle=(t:Transaction)=>{const original=t.refundOf?byId.get(t.refundOf):undefined;const referenceDate=original?.dateISO??t.dateISO;return Boolean(referenceDate&&referenceDate>=start&&referenceDate<=end)};
+    return Math.max(0,chargeDebtFromRows(cardRows.filter(t=>t.kind!=="card_repayment"&&belongsToCycle(t))));
+  };
+  const repaymentsFor = (card: MoneyCard) => transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id&&t.kind==="card_repayment").reduce((sum,t)=>sum+Math.abs(t.amount),0);
+  const debtFor = (card: MoneyCard) => cycleDebtFor(card,currentCardCycleMonth(card));
+  const totalDebtFor = (card: MoneyCard) => Math.max(0,chargeDebtFromRows(transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id))-repaymentsFor(card));
+  const closedDebtFor = (card: MoneyCard) => {
+    if(card.periodType==="no_period") return totalDebtFor(card);
+    const currentStart=cardCycleBounds(currentCardCycleMonth(card),card.cycleStartDay??1).start;
+    const cardRows=transactions.filter(t=>isEffectiveTransaction(t)&&t.cardId===card.id);
+    const byId=new Map(cardRows.map(t=>[t.id,t]));
+    const closedCharges=cardRows.filter(t=>{
+      if(t.kind==="card_repayment")return false;
+      const original=t.refundOf?byId.get(t.refundOf):undefined;
+      return Boolean((original?.dateISO??t.dateISO)&&(original?.dateISO??t.dateISO)!<currentStart);
+    });
+    return Math.max(0,chargeDebtFromRows(closedCharges)-repaymentsFor(card));
+  };
   const archiveCard = async(card:MoneyCard) => {
     const outstanding=totalDebtFor(card);
     if(outstanding>0.005){window.alert(`Prima di estinguere ${card.name} devi ripagare il debito residuo di ${money(outstanding)}.`);return;}
@@ -969,20 +993,20 @@ function CreditCardsSection({ onAdd, cards, accounts, transactions, refresh, ope
   const detail = cards.find(card=>card.id===detailId);
   if (detail) {
     const rows = cycleRowsFor(detail,cycleMonth);
-    const due = Math.max(0,debtFromRows(rows));
-    const totalOutstanding = totalDebtFor(detail);
+    const due = cycleDebtFor(detail,cycleMonth);
+    const payableOutstanding = closedDebtFor(detail);
     const linked = accounts.find(account=>account.id===detail.linkedAccountId);
     const bounds = detail.periodType==="monthly" ? cardCycleBounds(cycleMonth,detail.cycleStartDay??1) : null;
     return <section className="section-page">
       <div className="inner-page-header"><button onClick={()=>setDetailId(null)}><AppIcon name="back"/></button><div><small>{detail.archived?"CARTA ESTINTA":"CARTA DI CREDITO"}</small><h2>{detail.name}</h2><p>{detail.archived?"Sola consultazione · operazioni storiche conservate":detail.periodType==="monthly"?`Ciclo dal giorno ${detail.cycleStartDay??1} · addebito il ${detail.paymentDay??1}`:"Carta senza periodo"}</p></div>{!detail.archived&&<button className="outline edit-card-button" onClick={()=>setEditor(detail)}><AppIcon name="edit" size={15}/> Modifica carta</button>}</div>
       {bounds&&<div className="period-nav"><button onClick={()=>setCycleMonth(month=>shiftMonthKey(month,-1))}><AppIcon name="back" size={15}/> Ciclo precedente</button><strong>{compactDate(bounds.start)} – {compactDate(bounds.end)}</strong><button onClick={()=>setCycleMonth(month=>shiftMonthKey(month,1))}>Ciclo successivo <AppIcon name="forward" size={15}/></button></div>}
       <div className="card-due-summary"><span>Ammontare dovuto nel ciclo</span><strong>{money(due)}</strong></div>
-      <article className="panel month-transactions">{rows.length?rows.map(t=><TransactionRow key={t.id} t={t} onOpen={openTransaction}/>):<div className="empty">Nessun movimento nel ciclo selezionato.</div>}</article>
+      <article className="panel month-transactions">{rows.length?rows.map(t=><TransactionRow key={t.id} t={t} onOpen={openTransaction} cardView/>):<div className="empty">Nessun movimento nel ciclo selezionato.</div>}</article>
       {!detail.archived&&<div className={actions?"card-actions open":"card-actions"}><div><button onClick={()=>setRepay(true)}><span><AppIcon name="card"/></span>Ripaga</button><button onClick={()=>onAdd("transfer",linked?.name)}><span><AppIcon name="transfer"/></span>Trasferisci fondi</button><button onClick={()=>onAdd("income",linked?.name,detail.id)}><span><AppIcon name="income"/></span>Entrata</button><button onClick={()=>onAdd("expense",linked?.name,detail.id)}><span><AppIcon name="expense"/></span>Uscita</button><button className="danger" onClick={()=>void archiveCard(detail)}><span><AppIcon name="archive"/></span>Estingui carta</button></div><button className="quick-main" onClick={()=>setActions(x=>!x)}><AppIcon name={actions?"close":"plus"} size={23}/></button></div>}
-      {repay&&<CardRepayModal card={detail} due={totalOutstanding} accounts={accounts} close={()=>setRepay(false)} refresh={refresh}/>} {editor&&<CardModal card={editor==="new"?undefined:editor} accounts={accounts} close={()=>setEditor(null)} refresh={refresh}/>}</section>;
+      {repay&&<CardRepayModal card={detail} due={payableOutstanding} accounts={accounts} close={()=>setRepay(false)} refresh={refresh}/>} {editor&&<CardModal card={editor==="new"?undefined:editor} accounts={accounts} close={()=>setEditor(null)} refresh={refresh}/>}</section>;
   }
-  const totalDue = visibleCards.reduce((sum,card)=>sum+totalDebtFor(card),0);
-  return <section className="section-page"><div className="cards-total"><span>AMMONTARE DOVUTO · DEBITO COMPLESSIVO</span><strong>{money(totalDue)}</strong></div>{visibleCards.length?visibleCards.map(card=>{const due=Math.max(0,debtFor(card));const limit=card.creditLimit||0;const percent=limit?Math.min(100,Math.round(due/limit*100)):0;return <button className="credit-card-panel" key={card.id} onClick={()=>{setDetailId(card.id);setCycleMonth(currentCardCycleMonth(card))}}><div><small>{card.name.toUpperCase()}</small><h3>{money(due)}</h3><span>Debito ciclo corrente</span></div><div className="credit-period"><span>{card.periodType==="monthly"?`Ciclo dal ${card.cycleStartDay??1}`:"Senza ciclo"}</span><b>{percent}%</b><span>{card.paymentDay?`Pag. ${card.paymentDay}`:""}</span><div className="progress"><i style={{width:`${percent}%`}}/></div><p>{limit?`Limite ${money(limit)} · Residuo ${money(Math.max(0,limit-due))}`:"Nessun limite impostato"}</p></div><i>›</i></button>}):<div className="empty panel">Nessuna carta di credito attiva. Aggiungine una con il pulsante +.</div>}{archivedCards.length>0&&<div className="archived-cards"><button className="archived-cards-toggle" onClick={()=>setShowArchived(value=>!value)}><span>Carte estinte ({archivedCards.length})</span><AppIcon name={showArchived?"up":"down"} size={17}/></button>{showArchived&&<div>{archivedCards.map(card=><button key={card.id} onClick={()=>{setDetailId(card.id);setCycleMonth(currentCardCycleMonth(card))}}><span><AppIcon name="archive" size={17}/></span><div><b>{card.name}</b><small>Estinta · sola consultazione</small></div><AppIcon name="forward" size={16}/></button>)}</div>}</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor("new")}><AppIcon name="plus" size={22}/></button>{editor&&<CardModal card={editor==="new"?undefined:editor} accounts={accounts} close={()=>setEditor(null)} refresh={refresh}/>}</section>;
+  const totalDue = visibleCards.reduce((sum,card)=>sum+closedDebtFor(card),0);
+  return <section className="section-page"><div className="cards-total"><span>AMMONTARE DOVUTO · CICLI CONCLUSI</span><strong>{money(totalDue)}</strong></div>{visibleCards.length?visibleCards.map(card=>{const due=Math.max(0,debtFor(card));const limit=card.creditLimit||0;const percent=limit?Math.min(100,Math.round(due/limit*100)):0;return <button className="credit-card-panel" key={card.id} onClick={()=>{setDetailId(card.id);setCycleMonth(currentCardCycleMonth(card))}}><div><small>{card.name.toUpperCase()}</small><h3>{money(due)}</h3><span>Debito ciclo corrente</span></div><div className="credit-period"><span>{card.periodType==="monthly"?`Ciclo dal ${card.cycleStartDay??1}`:"Senza ciclo"}</span><b>{percent}%</b><span>{card.paymentDay?`Pag. ${card.paymentDay}`:""}</span><div className="progress"><i style={{width:`${percent}%`}}/></div><p>{limit?`Limite ${money(limit)} · Residuo ${money(Math.max(0,limit-due))}`:"Nessun limite impostato"}</p></div><i>›</i></button>}):<div className="empty panel">Nessuna carta di credito attiva. Aggiungine una con il pulsante +.</div>}{archivedCards.length>0&&<div className="archived-cards"><button className="archived-cards-toggle" onClick={()=>setShowArchived(value=>!value)}><span>Carte estinte ({archivedCards.length})</span><AppIcon name={showArchived?"up":"down"} size={17}/></button>{showArchived&&<div>{archivedCards.map(card=><button key={card.id} onClick={()=>{setDetailId(card.id);setCycleMonth(currentCardCycleMonth(card))}}><span><AppIcon name="archive" size={17}/></span><div><b>{card.name}</b><small>Estinta · sola consultazione</small></div><AppIcon name="forward" size={16}/></button>)}</div>}</div>}<button className="quick-main quick-standalone" onClick={()=>setEditor("new")}><AppIcon name="plus" size={22}/></button>{editor&&<CardModal card={editor==="new"?undefined:editor} accounts={accounts} close={()=>setEditor(null)} refresh={refresh}/>}</section>;
 }
 
 function CardModal({ card, accounts, close, refresh }: { card?: MoneyCard; accounts: MoneyAccount[]; close: () => void; refresh: () => Promise<void> }) {
@@ -992,8 +1016,9 @@ function CardModal({ card, accounts, close, refresh }: { card?: MoneyCard; accou
 }
 
 function CardRepayModal({ card, due, accounts, close, refresh }: { card: MoneyCard; due: number; accounts: MoneyAccount[]; close: () => void; refresh: () => Promise<void> }) {
-  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const accountId=String(fd.get("account"));const {data:{user}}=await getSupabaseBrowserClient().auth.getUser();if(!user)return;const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:user.id,kind:"card_repayment",account_id:accountId,card_id:card.id,amount:parseItalianAmount(fd.get("amount")),transaction_date:toIsoDate(new Date()),confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:`Pagamento ${card.name}`});if(error){alert(error.message);return;}await refresh();close();};
-  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>PAGAMENTO CARTA</small><h2>Ripaga {card.name}</h2></div></div><div className="repay-due"><span>Ammontare dovuto</span><strong>{money(due)}</strong></div><label>Valore<input name="amount" type="text" inputMode="decimal" defaultValue={amountInput(due)} required/></label><label>Conto di pagamento<select name="account">{accounts.filter(a=>!a.archived).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer">Salva pagamento</button></div></form></div>;
+  const paymentAccounts=accounts.filter(account=>!account.archived&&!account.isContainer&&account.type==="bank"&&(!account.parentAccountId||account.accountRole==="main"));
+  const save=async(event:FormEvent<HTMLFormElement>)=>{event.preventDefault();const fd=new FormData(event.currentTarget);const accountId=String(fd.get("account"));const amount=parseItalianAmount(fd.get("amount"));if(!paymentAccounts.some(account=>account.id===accountId)){alert("Seleziona un conto corrente principale.");return;}if(amount<=0||amount>due+.005){alert(`Puoi ripagare al massimo ${money(due)}, relativo ai cicli già conclusi.`);return;}const {data:{user}}=await getSupabaseBrowserClient().auth.getUser();if(!user)return;const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:user.id,kind:"card_repayment",account_id:accountId,card_id:card.id,amount,transaction_date:toIsoDate(new Date()),confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:`Trasferimento per ripagamento ${card.name}`});if(error){alert(error.message);return;}await refresh();close();};
+  return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={save}><div className="modal-title"><div><small>TRASFERIMENTO ALLA CARTA</small><h2>Ripaga {card.name}</h2></div></div><div className="repay-due"><span>Cicli conclusi da ripagare</span><strong>{money(due)}</strong></div><label>Valore<input name="amount" type="text" inputMode="decimal" defaultValue={amountInput(due)} required/></label><label>Conto corrente di pagamento<select name="account" required>{paymentAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>{!paymentAccounts.length&&<div className="empty">Non è disponibile alcun conto corrente principale.</div>}<div className="modal-actions"><button type="button" className="cancel" onClick={close}>Annulla</button><button className="save-action transfer" disabled={!paymentAccounts.length||due<=.005}>Salva trasferimento</button></div></form></div>;
 }
 
 function SimpleEntityModal({ title, close, type }: { title: string; close: () => void; type: "account" | "card" }) {
