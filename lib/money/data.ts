@@ -21,6 +21,7 @@ export type MoneyAccount = {
   accountRole: "standard" | "main" | "pocket" | "deposit";
   annualInterestRate: number;
   interestLastAccrualDate: string | null;
+  interestRemainder: number;
 };
 
 export type MoneyCategory = {
@@ -344,6 +345,7 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       accountRole: row.account_role || "standard",
       annualInterestRate: Number(row.annual_interest_rate || 0),
       interestLastAccrualDate: row.interest_last_accrual_date ?? null,
+      interestRemainder: Number(row.interest_remainder || 0),
     };
   });
 

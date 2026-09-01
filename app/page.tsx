@@ -842,7 +842,7 @@ function AccountModal({ account, accounts = [], primaryCurrency = typeof window!
   const accountIcons=["bank-logo-revolut","bank-logo-mediolanum",...standardAccountIcons];
   useEffect(()=>{
     if(accounts.length){setAvailableAccounts(accounts);return;}
-    void getSupabaseBrowserClient().from("accounts").select("*").is("archived_at",null).then(({data})=>setAvailableAccounts((data||[]).map(row=>({id:row.id,name:row.name,type:row.type,openingBalance:Number(row.opening_balance||0),balance:0,voucherUnitValue:null,voucherCount:0,hidden:false,archived:false,icon:row.icon||"bank",color:row.color||"#7051bf",notes:row.notes||"",currency:row.currency||"EUR",exchangeRate:Number(row.exchange_rate||1),sortOrder:Number(row.sort_order||0),isContainer:Boolean(row.is_container),parentAccountId:row.parent_account_id||null,accountRole:row.account_role||"standard",annualInterestRate:Number(row.annual_interest_rate||0),interestLastAccrualDate:row.interest_last_accrual_date||null}))));
+    void getSupabaseBrowserClient().from("accounts").select("*").is("archived_at",null).then(({data})=>setAvailableAccounts((data||[]).map(row=>({id:row.id,name:row.name,type:row.type,openingBalance:Number(row.opening_balance||0),balance:0,voucherUnitValue:null,voucherCount:0,hidden:false,archived:false,icon:row.icon||"bank",color:row.color||"#7051bf",notes:row.notes||"",currency:row.currency||"EUR",exchangeRate:Number(row.exchange_rate||1),sortOrder:Number(row.sort_order||0),isContainer:Boolean(row.is_container),parentAccountId:row.parent_account_id||null,accountRole:row.account_role||"standard",annualInterestRate:Number(row.annual_interest_rate||0),interestLastAccrualDate:row.interest_last_accrual_date||null,interestRemainder:Number(row.interest_remainder||0)}))));
   },[accounts]);
   const containers=availableAccounts.filter(item=>item.isContainer&&!item.archived&&item.id!==currentAccount?.id);
   return <div className="modal-backdrop"><form className="modal entity-modal" onSubmit={async event=>{event.preventDefault();setBusy(true);await save({name:name.trim(),type:isContainer?"other":type,openingBalance:isContainer?0:parseItalianAmount(openingBalance),voucherUnitValue:!isContainer&&type==="meal_vouchers"?parsedVoucherValue:null,notes,icon,currency,exchangeRate:currency===primaryCurrency?1:Math.max(.00000001,parseItalianAmount(exchangeRate)),isContainer,parentAccountId:isContainer?null:parentAccountId||null,accountRole:isContainer?"standard":accountRole,annualInterestRate:!isContainer&&accountRole==="deposit"?Math.max(0,parseItalianAmount(annualInterestRate)):0},currentAccount);setBusy(false)}}>
@@ -1578,6 +1578,7 @@ export default function Home() {
       const last=account.interestLastAccrualDate||cutoff;
       const cursor=new Date(`${last}T12:00:00`);cursor.setDate(cursor.getDate()+1);
       let generated=0;
+      let remainder=Math.max(0,Math.min(.0099999999,account.interestRemainder||0));
       while(toIsoDate(cursor)<=cutoff){
         const date=toIsoDate(cursor);
         const balanceAtDate=account.openingBalance+data.transactions.filter(transaction=>(!transaction.cardId||transaction.kind==="card_repayment")&&(transaction.accountId===account.id||transaction.destinationAccountId===account.id)&&(!transaction.dueDate||transaction.confirmedAt)&&transaction.transactionDate<=date).reduce((sum,transaction)=>{
@@ -1585,7 +1586,10 @@ export default function Home() {
           if(transaction.accountId!==account.id)return sum;
           return sum+(transaction.kind==="expense"||transaction.kind==="card_repayment"?-transaction.amount:transaction.amount);
         },0)+generated;
-        const interest=Math.round(Math.max(0,balanceAtDate)*account.annualInterestRate/100/365*100)/100;
+        const exactDailyInterest=Math.max(0,balanceAtDate)*account.annualInterestRate/100/365;
+        const accumulated=exactDailyInterest+remainder;
+        const interest=Math.floor((accumulated+1e-10)*100)/100;
+        remainder=Math.max(0,accumulated-interest);
         if(interest>0){
           const interestCategory=data.categories.find(category=>category.kind==="income"&&category.name.toLocaleLowerCase("it-IT")==="interessi maturati");
           const {error}=await getSupabaseBrowserClient().from("transactions").insert({user_id:activeUser.id,kind:"income",account_id:account.id,category_id:interestCategory?.id??null,amount:interest,transaction_date:date,confirmed_at:new Date().toISOString(),accounted_at:new Date().toISOString(),notes:"Interesse giornaliero automatico"});
@@ -1593,7 +1597,7 @@ export default function Home() {
         }
         cursor.setDate(cursor.getDate()+1);
       }
-      if(!account.interestLastAccrualDate||last<cutoff){const {error}=await getSupabaseBrowserClient().from("accounts").update({interest_last_accrual_date:cutoff}).eq("id",account.id);if(error)throw error;changed=true;}
+      if(!account.interestLastAccrualDate||last<cutoff){const {error}=await getSupabaseBrowserClient().from("accounts").update({interest_last_accrual_date:cutoff,interest_remainder:remainder}).eq("id",account.id);if(error)throw error;changed=true;}
     }
     return changed;
   };

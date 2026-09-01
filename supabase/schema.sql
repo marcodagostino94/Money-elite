@@ -34,6 +34,7 @@ create table accounts (
   account_role text not null default 'standard' check (account_role in ('standard','main','pocket','deposit')),
   annual_interest_rate numeric(8,4) not null default 0 check (annual_interest_rate >= 0),
   interest_last_accrual_date date,
+  interest_remainder numeric(20,12) not null default 0 check (interest_remainder >= 0 and interest_remainder < 0.01),
   voucher_unit_value numeric(10,2),
   hidden_from_totals boolean not null default false,
   archived_at timestamptz,

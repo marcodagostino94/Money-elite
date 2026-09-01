@@ -33,6 +33,8 @@ Per sincronizzare l’ordine dei conti tra dispositivi, eseguire anche `supabase
 
 Per attivare contenitori, Pocket, conti deposito e accrediti giornalieri, eseguire `supabase/migrations/20260805_account_containers_and_interest.sql` una sola volta.
 
+Per conservare e riportare al giorno successivo i millesimi degli interessi giornalieri, eseguire anche `supabase/migrations/20260901_daily_interest_remainder.sql` una sola volta.
+
 Per aggiungere la categoria degli interessi maturati, eseguire `supabase/migrations/20260806_accrued_interest_category.sql` una sola volta.
 
 Per sincronizzare i modelli tra dispositivi, eseguire `supabase/migrations/20260806_synced_transaction_templates.sql` una sola volta.

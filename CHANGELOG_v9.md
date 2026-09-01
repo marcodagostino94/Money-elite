@@ -4,6 +4,8 @@ Release principale che consolida tutte le funzioni e le correzioni approvate fin
 
 ## Versione 9.0.0
 
+- Corretto il calcolo degli interessi giornalieri: l'accredito viene sempre troncato al centesimo inferiore, senza arrotondamenti per eccesso.
+- I millesimi non accreditati vengono conservati e sommati al giorno successivo, anche cambiando dispositivo o riaprendo l'app.
 - L'ammontare dovuto generale delle carte include tutti i cicli non ancora ripagati.
 - La card di ogni carta continua a mostrare separatamente il debito e l'utilizzo del ciclo corrente.
 - Il dettaglio del ciclo conserva la navigazione e il totale del periodo selezionato.
