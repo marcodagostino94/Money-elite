@@ -1906,10 +1906,11 @@ export default function Home() {
     if(confirmingRecurrences.current.has(confirmationKey)) return;
     confirmingRecurrences.current.add(confirmationKey);
     setDataError("");
+    const today=toIsoDate(new Date());
     const optimisticNextDate=nextRecurrenceDate(recurrence);
     const optimisticCount=recurrence.occurrenceCount+1;
     setRecurrences(current=>current.map(item=>item.id===recurrence.id?{...item,nextDate:optimisticNextDate,occurrenceCount:optimisticCount}:item));
-    setTransactions(current=>[{...transaction,id:transaction.recurrencePlaceholder?`optimistic:${confirmationKey}`:transaction.id,confirmedAt:new Date().toISOString(),accounted:recurrence.automaticAccounting,dueDate:recurrence.nextDate,recurrencePlaceholder:false},...current.filter(item=>item.id!==transaction.id)]);
+    setTransactions(current=>[{...transaction,id:transaction.recurrencePlaceholder?`optimistic:${confirmationKey}`:transaction.id,dateISO:today,date:formatItalianDate(today),confirmedAt:new Date().toISOString(),accounted:recurrence.automaticAccounting,dueDate:recurrence.nextDate,recurrencePlaceholder:false},...current.filter(item=>item.id!==transaction.id)]);
     try {
       const {data:existing,error:lookupError}=await supabase.from("transactions")
         .select("id")
@@ -1932,7 +1933,7 @@ export default function Home() {
           recurrence_id:recurrence.id,
           transfer_group_id:recurrence.kind==="transfer"?crypto.randomUUID():null,
           amount:Math.abs(recurrence.amount),
-          transaction_date:recurrence.nextDate,
+          transaction_date:today,
           due_date:recurrence.nextDate,
           confirmed_at:null,
           accounted_at:null,
@@ -1942,7 +1943,7 @@ export default function Home() {
         transactionId=created.id;
       }
       const now=new Date().toISOString();
-      const updates: { confirmed_at: string; accounted_at?: string } = { confirmed_at: now };
+      const updates: { transaction_date: string; confirmed_at: string; accounted_at?: string } = { transaction_date:today,confirmed_at: now };
       if(recurrence.automaticAccounting) updates.accounted_at = now;
       const {error:confirmError}=await supabase.from("transactions").update(updates).eq("id",transactionId).is("confirmed_at",null);
       if(confirmError) throw confirmError;

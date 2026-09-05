@@ -4,6 +4,8 @@ Release principale che consolida tutte le funzioni e le correzioni approvate fin
 
 ## Versione 9.0.0
 
+- Confermando dalla Dashboard una pianificata o un abbonamento scaduto, la transazione reale viene ora registrata con la data odierna.
+- La scadenza originaria resta conservata come riferimento della ricorrenza e il calendario delle occorrenze successive continua ad avanzare dalla data prevista.
 - Corretto il calcolo degli interessi giornalieri: l'accredito viene sempre troncato al centesimo inferiore, senza arrotondamenti per eccesso.
 - I millesimi non accreditati vengono conservati e sommati al giorno successivo, anche cambiando dispositivo o riaprendo l'app.
 - L'ammontare dovuto generale delle carte include tutti i cicli non ancora ripagati.
