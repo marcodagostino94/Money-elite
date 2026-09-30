@@ -2429,6 +2429,7 @@ function GenericSection({
       <SettingsSection
         accounts={accounts}
         categories={categories}
+        refresh={refresh}
         primaryCurrency={primaryCurrency}
         onChangePrimaryCurrency={onChangePrimaryCurrency}
         dashboardAccountIds={dashboardAccountIds}
@@ -7939,7 +7940,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.3.0</h2>
+          <h2>Money Elite versione 10.4.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -7982,8 +7983,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Le rate dei finanziamenti mantengono il collegamento alla loro
-              scadenza anche quando si corregge la data effettiva di pagamento.
+              La gestione di categorie e sottocategorie è ora sincronizzata
+              realmente con il database e con i moduli Entrata/Uscita.
             </p>
           </div>
         </article>
@@ -8129,13 +8130,16 @@ const startingManagedCategories: ManagedCategory[] = [
   },
 ];
 
-function CategoryManagement() {
-  const [categories, setCategories] = useState(startingManagedCategories);
-  const [styles, setStyles] = useState<
-    Record<string, { icon: string; color: string }>
-  >({});
+function CategoryManagement({
+  categories,
+  refresh,
+}: {
+  categories: MoneyCategory[];
+  refresh: () => Promise<void>;
+}) {
   const [tab, setTab] = useState<"Entrata" | "Uscita">("Uscita");
-  const [expanded, setExpanded] = useState<string | null>("expense-2");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [working, setWorking] = useState(false);
   const [editor, setEditor] = useState<{
     mode: "category" | "subcategory";
     categoryId?: string;
@@ -8165,10 +8169,32 @@ function CategoryManagement() {
     "fun",
   ];
   const visible = categories
-    .filter((c) => c.type === tab)
+    .filter(
+      (item) =>
+        !item.parentId &&
+        item.kind === (tab === "Entrata" ? "income" : "expense"),
+    )
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      type: tab,
+      children: categories
+        .filter((child) => child.parentId === item.id)
+        .sort((a, b) => a.name.localeCompare(b.name, "it"))
+        .map((child) => child.name),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
-  const styleFor = (name: string) =>
-    styles[name] || { icon: categoryIcon(name), color: categoryColor(name) };
+  const styleFor = (name: string, parentId?: string) => {
+    const item = categories.find(
+      (category) =>
+        category.name === name &&
+        (parentId === undefined || category.parentId === parentId),
+    );
+    return {
+      icon: item?.icon || categoryIcon(name),
+      color: item?.color || categoryColor(name),
+    };
+  };
   const openEditor = (next: NonNullable<typeof editor>, value = "") => {
     const current = styleFor(value);
     setDraft(value);
@@ -8176,52 +8202,92 @@ function CategoryManagement() {
     setDraftColor(current.color);
     setEditor(next);
   };
-  const save = () => {
+  const save = async () => {
     const name = draft.trim();
     if (!name || !editor) return;
-    if (editor.mode === "category") {
-      if (editor.categoryId)
-        setCategories((items) =>
-          items.map((c) => (c.id === editor.categoryId ? { ...c, name } : c)),
-        );
-      else
-        setCategories((items) => [
-          ...items,
-          { id: `category-${Date.now()}`, name, type: tab, children: [] },
-        ]);
-    } else if (editor.categoryId) {
-      setCategories((items) =>
-        items.map((c) =>
-          c.id !== editor.categoryId
-            ? c
-            : {
-                ...c,
-                children: editor.oldName
-                  ? c.children.map((x) => (x === editor.oldName ? name : x))
-                  : [...c.children, name].sort((a, b) =>
-                      a.localeCompare(b, "it"),
-                    ),
-              },
-        ),
+    setWorking(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sessione non disponibile.");
+      if (editor.mode === "category") {
+        const result = editor.categoryId
+          ? await supabase
+              .from("categories")
+              .update({ name, icon: draftIcon, color: draftColor })
+              .eq("id", editor.categoryId)
+          : await supabase.from("categories").insert({
+              user_id: user.id,
+              parent_id: null,
+              kind: tab === "Entrata" ? "income" : "expense",
+              name,
+              icon: draftIcon,
+              color: draftColor,
+            });
+        if (result.error) throw result.error;
+      } else if (editor.categoryId) {
+        const parent = categories.find((item) => item.id === editor.categoryId);
+        if (!parent) throw new Error("Categoria principale non trovata.");
+        const existingChild = editor.oldName
+          ? categories.find(
+              (item) =>
+                item.parentId === editor.categoryId &&
+                item.name === editor.oldName,
+            )
+          : null;
+        const result = existingChild
+          ? await supabase
+              .from("categories")
+              .update({ name, icon: draftIcon, color: draftColor })
+              .eq("id", existingChild.id)
+          : await supabase.from("categories").insert({
+              user_id: user.id,
+              parent_id: parent.id,
+              kind: parent.kind,
+              name,
+              icon: draftIcon,
+              color: draftColor,
+            });
+        if (result.error) throw result.error;
+      }
+      setEditor(null);
+      setDraft("");
+      await refresh();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Impossibile salvare la categoria.",
       );
+    } finally {
+      setWorking(false);
     }
-    setStyles((current) => ({
-      ...current,
-      [name]: { icon: draftIcon, color: draftColor },
-    }));
-    setEditor(null);
-    setDraft("");
   };
-  const removeCategory = (id: string) =>
-    setCategories((items) => items.filter((c) => c.id !== id));
-  const removeSubcategory = (id: string, name: string) =>
-    setCategories((items) =>
-      items.map((c) =>
-        c.id === id
-          ? { ...c, children: c.children.filter((x) => x !== name) }
-          : c,
-      ),
+  const removeCategory = async (id: string) => {
+    if (!window.confirm("Eliminare questa categoria e le sue sottocategorie?"))
+      return;
+    const { error } = await getSupabaseBrowserClient()
+      .from("categories")
+      .delete()
+      .eq("id", id);
+    if (error) alert(error.message);
+    else await refresh();
+  };
+  const removeSubcategory = async (id: string, name: string) => {
+    const child = categories.find(
+      (item) => item.parentId === id && item.name === name,
     );
+    if (!child || !window.confirm(`Eliminare la sottocategoria “${name}”?`))
+      return;
+    const { error } = await getSupabaseBrowserClient()
+      .from("categories")
+      .delete()
+      .eq("id", child.id);
+    if (error) alert(error.message);
+    else await refresh();
+  };
   return (
     <article className="panel settings-card category-management">
       <div className="category-management-heading">
@@ -8300,7 +8366,7 @@ function CategoryManagement() {
               <button
                 className="danger"
                 title="Elimina categoria"
-                onClick={() => removeCategory(category.id)}
+                onClick={() => void removeCategory(category.id)}
               >
                 <AppIcon name="trash" size={16} />
               </button>
@@ -8312,11 +8378,14 @@ function CategoryManagement() {
                     <span
                       className="managed-category-icon small"
                       style={{
-                        color: styleFor(child).color,
-                        background: `${styleFor(child).color}18`,
+                        color: styleFor(child, category.id).color,
+                        background: `${styleFor(child, category.id).color}18`,
                       }}
                     >
-                      <AppIcon name={styleFor(child).icon} size={15} />
+                      <AppIcon
+                        name={styleFor(child, category.id).icon}
+                        size={15}
+                      />
                     </span>
                     <b>{child}</b>
                     <button
@@ -8337,7 +8406,7 @@ function CategoryManagement() {
                     <button
                       className="danger"
                       title="Elimina sottocategoria"
-                      onClick={() => removeSubcategory(category.id, child)}
+                      onClick={() => void removeSubcategory(category.id, child)}
                     >
                       <AppIcon name="trash" size={15} />
                     </button>
@@ -8432,8 +8501,12 @@ function CategoryManagement() {
               <button className="cancel" onClick={() => setEditor(null)}>
                 Annulla
               </button>
-              <button className="save-action transfer" onClick={save}>
-                Salva
+              <button
+                className="save-action transfer"
+                disabled={working}
+                onClick={() => void save()}
+              >
+                {working ? "Salvataggio…" : "Salva"}
               </button>
             </div>
           </div>
@@ -9014,6 +9087,7 @@ function TemplateManagementVisual({
 function SettingsSection({
   accounts,
   categories,
+  refresh,
   primaryCurrency,
   onChangePrimaryCurrency,
   dashboardAccountIds,
@@ -9021,6 +9095,7 @@ function SettingsSection({
 }: {
   accounts: MoneyAccount[];
   categories: MoneyCategory[];
+  refresh: () => Promise<void>;
   primaryCurrency: string;
   onChangePrimaryCurrency: (currency: string) => Promise<void>;
   dashboardAccountIds: string[];
@@ -9199,7 +9274,7 @@ function SettingsSection({
       </article>
 
       <TemplateManagementVisual accounts={accounts} categories={categories} />
-      <CategoryManagement />
+      <CategoryManagement categories={categories} refresh={refresh} />
       <article className="panel settings-card">
         <h3>Dati e sicurezza</h3>
         <p className="setting-note">
