@@ -799,7 +799,7 @@ const transactionFromDatabase = (
           ? "blue"
           : "orange",
     categoryColor: category
-      ? categoryVisual(parent || category).color
+      ? categoryVisual(category).color
       : row.kind === "transfer" || row.kind === "card_repayment"
         ? "#247ee8"
         : row.kind === "income" || row.kind === "refund"
@@ -1173,10 +1173,10 @@ const canonicalCategoryNames = new Set([
 
 const categoryVisual = (
   category: Pick<MoneyCategory, "name" | "icon" | "color">,
-) =>
-  canonicalCategoryNames.has(category.name)
-    ? { icon: categoryIcon(category.name), color: categoryColor(category.name) }
-    : { icon: category.icon || "circle", color: category.color || "#678098" };
+) => ({
+  icon: category.icon || categoryIcon(category.name) || "circle",
+  color: category.color || categoryColor(category.name) || "#678098",
+});
 
 const categoryVisualByName = (value: string, categories: MoneyCategory[]) => {
   const leaf = value.split("›").at(-1)?.trim() || value;
@@ -7987,7 +7987,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.5.0</h2>
+          <h2>Money Elite versione 10.7.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8030,8 +8030,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              La barra degli abbonamenti mostra l’avanzamento giornaliero reale
-              del ciclo fino alla prossima data di rinnovo.
+              Colori e simboli configurati nelle Impostazioni sono ora usati
+              uniformemente in transazioni, pianificate e report.
             </p>
           </div>
         </article>
@@ -8195,6 +8195,7 @@ function CategoryManagement({
   const [draft, setDraft] = useState("");
   const [draftIcon, setDraftIcon] = useState("circle");
   const [draftColor, setDraftColor] = useState("#678098");
+  const [draftParentId, setDraftParentId] = useState("");
   const iconChoices = [
     "home",
     "groceries",
@@ -8247,6 +8248,7 @@ function CategoryManagement({
     setDraft(value);
     setDraftIcon(current.icon);
     setDraftColor(current.color);
+    setDraftParentId(next.mode === "subcategory" ? next.categoryId || "" : "");
     setEditor(next);
   };
   const save = async () => {
@@ -8275,7 +8277,7 @@ function CategoryManagement({
             });
         if (result.error) throw result.error;
       } else if (editor.categoryId) {
-        const parent = categories.find((item) => item.id === editor.categoryId);
+        const parent = categories.find((item) => item.id === draftParentId);
         if (!parent) throw new Error("Categoria principale non trovata.");
         const existingChild = editor.oldName
           ? categories.find(
@@ -8287,7 +8289,13 @@ function CategoryManagement({
         const result = existingChild
           ? await supabase
               .from("categories")
-              .update({ name, icon: draftIcon, color: draftColor })
+              .update({
+                name,
+                icon: draftIcon,
+                color: draftColor,
+                parent_id: parent.id,
+                kind: parent.kind,
+              })
               .eq("id", existingChild.id)
           : await supabase.from("categories").insert({
               user_id: user.id,
@@ -8500,6 +8508,34 @@ function CategoryManagement({
                 }
               />
             </label>
+            {editor.mode === "subcategory" && (
+              <label>
+                Categoria principale
+                <select
+                  value={draftParentId}
+                  onChange={(event) => setDraftParentId(event.target.value)}
+                  required
+                >
+                  {categories
+                    .filter(
+                      (item) =>
+                        !item.parentId &&
+                        item.kind ===
+                          (tab === "Entrata" ? "income" : "expense"),
+                    )
+                    .sort((a, b) => a.name.localeCompare(b.name, "it"))
+                    .map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </select>
+                <small>
+                  Spostandola, tutte le transazioni e le pianificazioni
+                  collegate seguiranno automaticamente la sottocategoria.
+                </small>
+              </label>
+            )}
             <div className="style-editor">
               <div>
                 <span>Simbolo</span>
@@ -11223,12 +11259,7 @@ export default function Home() {
       accounted_at: transaction.accounted ? new Date().toISOString() : null,
       notes: transaction.notes?.trim() || null,
     };
-    const visualParent = category?.parentId
-      ? categories.find((item) => item.id === category.parentId)
-      : null;
-    const optimisticVisual = category
-      ? categoryVisual(visualParent || category)
-      : null;
+    const optimisticVisual = category ? categoryVisual(category) : null;
     const optimisticTransaction: Transaction = {
       ...transaction,
       accountId: account.id,
