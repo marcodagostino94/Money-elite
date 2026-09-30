@@ -152,6 +152,28 @@ create table transactions (
   )
 );
 
+create table financings (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  recurrence_id uuid not null unique references recurrences(id) on delete restrict,
+  name text not null,
+  lender text,
+  purchase_amount numeric(14,2) not null check (purchase_amount > 0),
+  financed_amount numeric(14,2) not null check (financed_amount > 0),
+  total_repayment numeric(14,2) not null check (total_repayment > 0),
+  installment_count integer not null check (installment_count > 0),
+  regular_installment_amount numeric(14,2) not null check (regular_installment_amount > 0),
+  final_installment_amount numeric(14,2) not null check (final_installment_amount > 0),
+  first_due_date date not null,
+  status text not null default 'active' check (status in ('active','completed','settled')),
+  settled_at timestamptz,
+  settlement_amount numeric(14,2),
+  settlement_transaction_id uuid references transactions(id) on delete set null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table budgets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
@@ -189,6 +211,8 @@ create index transactions_refund_idx on transactions(refund_of_id)
 create index recurrences_next_date_idx on recurrences(user_id, next_date)
   where active;
 create index budgets_user_month_idx on budgets(user_id, month);
+create index financings_user_status_idx on financings(user_id, status);
+create index financings_recurrence_idx on financings(recurrence_id);
 
 create or replace function set_updated_at()
 returns trigger
@@ -209,6 +233,8 @@ for each row execute function set_updated_at();
 create trigger recurrences_updated_at before update on recurrences
 for each row execute function set_updated_at();
 create trigger transactions_updated_at before update on transactions
+for each row execute function set_updated_at();
+create trigger financings_updated_at before update on financings
 for each row execute function set_updated_at();
 create trigger debts_updated_at before update on debts
 for each row execute function set_updated_at();
@@ -237,14 +263,16 @@ alter table recurrences enable row level security;
 alter table transactions enable row level security;
 alter table budgets enable row level security;
 alter table debts enable row level security;
+alter table financings enable row level security;
 
 -- I criteri RLS sottostanti mantengono ciascun dato separato per utente.
 -- Questi permessi consentono soltanto agli utenti che hanno effettuato l'accesso
 -- di interrogare e modificare le tabelle dell'app.
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table
-  profiles, accounts, cards, categories, recurrences, transactions, budgets, debts
+  profiles, accounts, cards, categories, recurrences, transactions, budgets, debts, financings
 to authenticated;
+grant select, insert, update, delete on table financings to service_role;
 grant usage, select on all sequences in schema public to authenticated;
 
 create policy profiles_owner on profiles for all to authenticated
@@ -276,6 +304,10 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
 create policy debts_owner on debts for all to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy financings_owner on financings for all to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 

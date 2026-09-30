@@ -1,11 +1,19 @@
-# Money Elite v4
+# Money Elite versione 10
 
-Applicazione personale per gestire conti, transazioni, ricorrenze, abbonamenti, carte di credito e budget.
+Applicazione personale per gestire conti, transazioni, ricorrenze, abbonamenti, finanziamenti, carte di credito e budget.
 
 ## Requisiti
 
 - Node.js 22.13 o successivo
 - Un progetto Supabase configurato
+
+## Aggiornamento dalla versione 9
+
+Prima di pubblicare la versione 10, eseguire nel SQL Editor di Supabase il file:
+
+`supabase/migrations/20260930_financings.sql`
+
+La migrazione crea la tabella dei finanziamenti con RLS, policy e GRANT espliciti per `authenticated` e `service_role`.
 
 ## Avvio locale
 
