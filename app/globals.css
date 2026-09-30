@@ -1888,6 +1888,9 @@ header h1 {
 .subscription-body > .progress {
   margin: 7px 0;
 }
+.subscription-body > .progress i {
+  transition: width 0.35s ease;
+}
 .subscription-body > strong,
 .subscription-body > small {
   display: block;

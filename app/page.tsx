@@ -500,6 +500,47 @@ const nextRecurrenceDate = (recurrence: MoneyRecurrence) => {
   return toIsoDate(date);
 };
 
+const recurrenceCycleProgress = (recurrence: MoneyRecurrence) => {
+  const interval = Math.max(1, recurrence.intervalCount || 1);
+  const end = new Date(`${recurrence.nextDate}T12:00:00`);
+  const start = new Date(end);
+  if (recurrence.frequency === "daily")
+    start.setDate(start.getDate() - interval);
+  if (recurrence.frequency === "weekly")
+    start.setDate(start.getDate() - 7 * interval);
+  if (recurrence.frequency === "monthly") {
+    const dueDay = start.getDate();
+    start.setDate(1);
+    start.setMonth(start.getMonth() - interval);
+    start.setDate(
+      Math.min(
+        dueDay,
+        new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(),
+      ),
+    );
+  }
+  if (recurrence.frequency === "yearly") {
+    const dueMonth = start.getMonth();
+    const dueDay = start.getDate();
+    start.setDate(1);
+    start.setFullYear(start.getFullYear() - interval);
+    start.setMonth(dueMonth);
+    start.setDate(
+      Math.min(
+        dueDay,
+        new Date(start.getFullYear(), dueMonth + 1, 0).getDate(),
+      ),
+    );
+  }
+  const today = new Date(`${toIsoDate(new Date())}T12:00:00`);
+  const duration = end.getTime() - start.getTime();
+  if (duration <= 0) return 100;
+  return Math.max(
+    0,
+    Math.min(100, ((today.getTime() - start.getTime()) / duration) * 100),
+  );
+};
+
 const recurrenceOccurrencesUntil = (
   recurrence: MoneyRecurrence,
   limitIso: string,
@@ -6376,6 +6417,7 @@ function SubscriptionsSection({
       <article className="panel subscription-list">
         {subscriptions.length ? (
           subscriptions.map((item) => {
+            const cycleProgress = recurrenceCycleProgress(item);
             const category = categories.find((c) => c.id === item.categoryId);
             const note = item.notes.toLocaleLowerCase("it");
             const inferredChild =
@@ -6425,7 +6467,12 @@ function SubscriptionsSection({
                     </span>
                   </div>
                   <div className="progress">
-                    <i style={{ width: "45%", background: visual.color }} />
+                    <i
+                      style={{
+                        width: `${cycleProgress}%`,
+                        background: visual.color,
+                      }}
+                    />
                   </div>
                   <strong>
                     {money(item.amount)} ogni{" "}
@@ -7940,7 +7987,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.4.0</h2>
+          <h2>Money Elite versione 10.5.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -7983,8 +8030,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              La gestione di categorie e sottocategorie è ora sincronizzata
-              realmente con il database e con i moduli Entrata/Uscita.
+              La barra degli abbonamenti mostra l’avanzamento giornaliero reale
+              del ciclo fino alla prossima data di rinnovo.
             </p>
           </div>
         </article>
