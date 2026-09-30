@@ -8998,3 +8998,93 @@ header h1 {
     font-size: 7px !important;
   }
 }
+.financing-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+}
+.financing-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+.financing-actions .danger {
+  color: #b55350;
+  border-color: #e4c8c6;
+}
+.financing-generate {
+  width: 100%;
+  margin: -2px 0 8px;
+}
+.installment-editor {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 310px;
+  overflow-y: auto;
+}
+.installment-editor-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f7f5f1;
+  padding: 11px 12px;
+  display: flex;
+  justify-content: space-between;
+}
+.installment-editor-head span {
+  font-size: 11px;
+  color: #777;
+}
+.installment-edit-row {
+  display: grid;
+  grid-template-columns: 65px 1fr 130px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+}
+.installment-edit-row > b {
+  font-size: 11px;
+}
+.installment-edit-row input {
+  min-width: 0;
+}
+.installment-edit-row .amount-input {
+  height: 39px;
+}
+.delete-paid-choice {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  background: #fff5f4;
+  border: 1px solid #efd5d2;
+  border-radius: 10px;
+}
+.delete-paid-choice input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+.delete-paid-choice span {
+  display: block;
+}
+.delete-paid-choice small {
+  display: block;
+  margin-top: 3px;
+  color: #777;
+}
+@media (max-width: 620px) {
+  .financing-actions {
+    grid-template-columns: 1fr;
+  }
+  .installment-edit-row {
+    grid-template-columns: 52px 1fr;
+  }
+  .installment-edit-row .amount-input {
+    grid-column: 2;
+  }
+}

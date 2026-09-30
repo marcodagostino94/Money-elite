@@ -109,6 +109,7 @@ export type MoneyFinancing = {
   settlementAmount: number | null;
   settlementTransactionId: string | null;
   notes: string;
+  installmentSchedule: { number: number; date: string; amount: number }[];
 };
 
 const categorySeeds: Array<
@@ -709,6 +710,25 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
       row.settlement_amount == null ? null : Number(row.settlement_amount),
     settlementTransactionId: row.settlement_transaction_id,
     notes: row.notes ?? "",
+    installmentSchedule:
+      Array.isArray(row.installment_schedule) && row.installment_schedule.length
+        ? row.installment_schedule.map((item: any, index: number) => ({
+            number: Number(item.number ?? index + 1),
+            date: String(item.date),
+            amount: Number(item.amount),
+          }))
+        : Array.from({ length: Number(row.installment_count) }, (_, index) => {
+            const date = new Date(`${row.first_due_date}T12:00:00`);
+            date.setMonth(date.getMonth() + index);
+            return {
+              number: index + 1,
+              date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
+              amount:
+                index === Number(row.installment_count) - 1
+                  ? Number(row.final_installment_amount)
+                  : Number(row.regular_installment_amount),
+            };
+          }),
   }));
   return {
     accounts,

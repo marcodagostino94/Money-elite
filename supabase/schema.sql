@@ -170,6 +170,7 @@ create table financings (
   settlement_amount numeric(14,2),
   settlement_transaction_id uuid references transactions(id) on delete set null,
   notes text,
+  installment_schedule jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

@@ -553,6 +553,7 @@ const scheduledExpenseTotals = (
         recurrenceId: item.id,
         dueDate: date,
         amount: item.amount,
+        confirmed: false,
       })),
   );
   const all = [
@@ -560,15 +561,24 @@ const scheduledExpenseTotals = (
       recurrenceId: item.recurrenceId!,
       dueDate: item.dueDate!,
       amount: Math.abs(item.amount),
+      confirmed: Boolean(item.confirmedAt),
     })),
     ...projected,
   ];
   return {
     monthRemaining: all
-      .filter((item) => item.dueDate >= today && item.dueDate.startsWith(month))
+      .filter(
+        (item) =>
+          !item.confirmed &&
+          item.dueDate >= today &&
+          item.dueDate.startsWith(month),
+      )
       .reduce((sum, item) => sum + item.amount, 0),
     yearRemaining: all
-      .filter((item) => item.dueDate >= today && item.dueDate <= yearEnd)
+      .filter(
+        (item) =>
+          !item.confirmed && item.dueDate >= today && item.dueDate <= yearEnd,
+      )
       .reduce((sum, item) => sum + item.amount, 0),
     monthTotal: all
       .filter((item) => item.dueDate.startsWith(month))
@@ -1182,8 +1192,8 @@ function Sidebar({
             {item.label}
           </button>
         ))}
-        <p className="nav-title menu-group">TRANSAZIONI PIANIFICATE</p>
-        {nav.slice(3, 5).map((item) => (
+        <p className="nav-title menu-group">PIANIFICAZIONE</p>
+        {nav.slice(3, 6).map((item) => (
           <button
             key={item.label}
             className={`nested ${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1198,7 +1208,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">GESTIONE</p>
-        {nav.slice(5, 8).map((item) => (
+        {nav.slice(6, 9).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1211,7 +1221,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(8).map((item) => (
+        {nav.slice(9).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -2299,6 +2309,7 @@ function GenericSection({
   section,
   onAdd,
   onNewFinancing,
+  onEditFinancing,
   accounts,
   cards,
   budgets,
@@ -2323,6 +2334,7 @@ function GenericSection({
   section: Exclude<Section, "Dashboard" | "Transazioni">;
   onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void;
   onNewFinancing: () => void;
+  onEditFinancing: (item: MoneyFinancing) => void;
   accounts: MoneyAccount[];
   cards: MoneyCard[];
   budgets: MoneyBudget[];
@@ -2467,6 +2479,7 @@ function GenericSection({
         cards={cards}
         refresh={refresh}
         onNew={onNewFinancing}
+        onEdit={onEditFinancing}
       />
     );
   if (section === "Conti")
@@ -5150,42 +5163,101 @@ type FinancingDraft = {
   categoryId: string;
   automaticAccounting: boolean;
   notes: string;
+  installmentSchedule: { number: number; date: string; amount: number }[];
 };
 
 function FinancingModal({
   accounts,
   cards,
   categories,
+  financing,
+  recurrence,
   close,
   save,
 }: {
   accounts: MoneyAccount[];
   cards: MoneyCard[];
   categories: MoneyCategory[];
+  financing?: MoneyFinancing;
+  recurrence?: MoneyRecurrence;
   close: () => void;
-  save: (draft: FinancingDraft) => Promise<void>;
+  save: (draft: FinancingDraft, financing?: MoneyFinancing) => Promise<void>;
 }) {
   const expenseRoots = categories
     .filter((item) => item.kind === "expense" && !item.parentId)
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
-  const [rootId, setRootId] = useState("");
+  const initialCategory = categories.find(
+    (item) => item.id === recurrence?.categoryId,
+  );
+  const [rootId, setRootId] = useState(
+    initialCategory?.parentId || initialCategory?.id || "",
+  );
   const children = categories
     .filter((item) => item.parentId === rootId)
     .sort((a, b) => a.name.localeCompare(b.name, "it"));
   const [working, setWorking] = useState(false);
-  const [automaticAccounting, setAutomaticAccounting] = useState(false);
+  const [automaticAccounting, setAutomaticAccounting] = useState(
+    recurrence?.automaticAccounting ?? false,
+  );
+  const [totalValue, setTotalValue] = useState(
+    amountInput(financing?.totalRepayment),
+  );
+  const [installmentCountValue, setInstallmentCountValue] = useState(
+    financing?.installmentCount ?? 12,
+  );
+  const [firstDateValue, setFirstDateValue] = useState(
+    financing?.firstDueDate ?? toIsoDate(new Date()),
+  );
+  const [schedule, setSchedule] = useState(
+    financing?.installmentSchedule ?? [],
+  );
+  const generateSchedule = () => {
+    const total = Math.abs(parseItalianAmount(totalValue));
+    const count = Math.max(1, installmentCountValue);
+    if (!total) return;
+    const base = Math.floor((total / count) * 100) / 100;
+    const first = Math.round((total - base * (count - 1)) * 100) / 100;
+    setSchedule(
+      Array.from({ length: count }, (_, index) => {
+        const date = new Date(`${firstDateValue}T12:00:00`);
+        const day = date.getDate();
+        date.setDate(1);
+        date.setMonth(date.getMonth() + index);
+        date.setDate(
+          Math.min(
+            day,
+            new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate(),
+          ),
+        );
+        return {
+          number: index + 1,
+          date: toIsoDate(date),
+          amount: index === 0 ? first : base,
+        };
+      }),
+    );
+  };
+  const initialSource = recurrence?.cardId
+    ? `card:${recurrence.cardId}`
+    : recurrence?.accountId
+      ? `account:${recurrence.accountId}`
+      : "";
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fd = new FormData(event.currentTarget);
     const source = String(fd.get("source") || "");
-    const installmentCount = Math.max(1, Number(fd.get("installments") || 1));
+    const installmentCount =
+      schedule.length || Math.max(1, Number(fd.get("installments") || 1));
     const purchaseAmount = Math.abs(
       parseItalianAmount(fd.get("purchaseAmount")),
     );
     const financedAmount =
       Math.abs(parseItalianAmount(fd.get("financedAmount"))) || purchaseAmount;
-    const totalRepayment =
-      Math.abs(parseItalianAmount(fd.get("totalRepayment"))) || financedAmount;
+    const totalRepayment = schedule.length
+      ? Math.round(schedule.reduce((sum, item) => sum + item.amount, 0) * 100) /
+        100
+      : Math.abs(parseItalianAmount(fd.get("totalRepayment"))) ||
+        financedAmount;
     const categoryId = String(fd.get("category") || rootId);
     const cardId = source.startsWith("card:") ? source.slice(5) : null;
     const card = cards.find((item) => item.id === cardId);
@@ -5202,26 +5274,31 @@ function FinancingModal({
       return;
     setWorking(true);
     try {
-      await save({
-        name: String(fd.get("name") || "").trim(),
-        lender: String(fd.get("lender") || "").trim(),
-        purchaseAmount,
-        financedAmount,
-        totalRepayment,
-        installmentCount,
-        firstDueDate: String(fd.get("firstDueDate") || ""),
-        accountId,
-        cardId,
-        categoryId,
-        automaticAccounting,
-        notes: String(fd.get("notes") || "").trim(),
-      });
+      await save(
+        {
+          name: String(fd.get("name") || "").trim(),
+          lender: String(fd.get("lender") || "").trim(),
+          purchaseAmount,
+          financedAmount,
+          totalRepayment,
+          installmentCount,
+          firstDueDate:
+            schedule[0]?.date || String(fd.get("firstDueDate") || ""),
+          accountId,
+          cardId,
+          categoryId,
+          automaticAccounting,
+          notes: String(fd.get("notes") || "").trim(),
+          installmentSchedule: schedule,
+        },
+        financing,
+      );
       close();
     } catch (error) {
       alert(
         error instanceof Error
           ? error.message
-          : "Impossibile creare il finanziamento.",
+          : "Impossibile salvare il finanziamento.",
       );
     } finally {
       setWorking(false);
@@ -5236,8 +5313,14 @@ function FinancingModal({
       >
         <div className="modal-title">
           <div>
-            <small>NUOVO FINANZIAMENTO</small>
-            <h2>Crea il piano rateale</h2>
+            <small>
+              {financing ? "MODIFICA FINANZIAMENTO" : "NUOVO FINANZIAMENTO"}
+            </small>
+            <h2>
+              {financing
+                ? "Modifica il piano rateale"
+                : "Crea il piano rateale"}
+            </h2>
           </div>
           <button type="button" onClick={close}>
             <AppIcon name="close" />
@@ -5249,12 +5332,17 @@ function FinancingModal({
             name="name"
             required
             autoFocus
+            defaultValue={financing?.name}
             placeholder="Es. iPhone 17 Pro Max"
           />
         </label>
         <label>
           Finanziaria o creditore
-          <input name="lender" placeholder="Facoltativo" />
+          <input
+            name="lender"
+            placeholder="Facoltativo"
+            defaultValue={financing?.lender}
+          />
         </label>
         <div className="financing-form-grid">
           <label>
@@ -5264,6 +5352,7 @@ function FinancingModal({
               required
               inputMode="decimal"
               placeholder="0,00"
+              defaultValue={amountInput(financing?.purchaseAmount)}
             />
           </label>
           <label>
@@ -5273,6 +5362,7 @@ function FinancingModal({
               required
               inputMode="decimal"
               placeholder="0,00"
+              defaultValue={amountInput(financing?.financedAmount)}
             />
           </label>
           <label>
@@ -5282,6 +5372,8 @@ function FinancingModal({
               required
               inputMode="decimal"
               placeholder="0,00"
+              value={totalValue}
+              onChange={(event) => setTotalValue(event.target.value)}
             />
           </label>
           <label>
@@ -5291,7 +5383,12 @@ function FinancingModal({
               required
               type="number"
               min="1"
-              defaultValue="12"
+              value={installmentCountValue}
+              onChange={(event) =>
+                setInstallmentCountValue(
+                  Math.max(1, Number(event.target.value) || 1),
+                )
+              }
             />
           </label>
         </div>
@@ -5301,12 +5398,66 @@ function FinancingModal({
             name="firstDueDate"
             required
             type="date"
-            defaultValue={toIsoDate(new Date())}
+            value={firstDateValue}
+            onChange={(event) => setFirstDateValue(event.target.value)}
           />
         </label>
+        <button
+          type="button"
+          className="outline financing-generate"
+          onClick={generateSchedule}
+        >
+          Calcola e mostra le rate
+        </button>
+        {schedule.length > 0 && (
+          <div className="installment-editor">
+            <div className="installment-editor-head">
+              <b>Piano rateale</b>
+              <span>
+                Totale{" "}
+                {money(schedule.reduce((sum, item) => sum + item.amount, 0))}
+              </span>
+            </div>
+            {schedule.map((item, index) => (
+              <div className="installment-edit-row" key={item.number}>
+                <b>Rata {item.number}</b>
+                <input
+                  type="date"
+                  value={item.date}
+                  onChange={(event) =>
+                    setSchedule((current) =>
+                      current.map((row, rowIndex) =>
+                        rowIndex === index
+                          ? { ...row, date: event.target.value }
+                          : row,
+                      ),
+                    )
+                  }
+                />
+                <div className="amount-input">
+                  <span>EUR</span>
+                  <input
+                    inputMode="decimal"
+                    value={amountInput(item.amount)}
+                    onChange={(event) => {
+                      const amount = Math.abs(
+                        parseItalianAmount(event.target.value),
+                      );
+                      setSchedule((current) =>
+                        current.map((row, rowIndex) =>
+                          rowIndex === index ? { ...row, amount } : row,
+                        ),
+                      );
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <label>
           Conto o carta
-          <select name="source" required defaultValue="">
+          <select name="source" required defaultValue={initialSource}>
             <option value="" disabled>
               Seleziona
             </option>
@@ -5346,7 +5497,11 @@ function FinancingModal({
         {rootId && (
           <label>
             Sottocategoria
-            <select name="category" required defaultValue="">
+            <select
+              name="category"
+              required
+              defaultValue={initialCategory?.parentId ? initialCategory.id : ""}
+            >
               <option value="" disabled>
                 Seleziona sottocategoria
               </option>
@@ -5373,14 +5528,23 @@ function FinancingModal({
         </div>
         <label>
           Note
-          <textarea name="notes" rows={2} placeholder="Facoltative" />
+          <textarea
+            name="notes"
+            rows={2}
+            placeholder="Facoltative"
+            defaultValue={financing?.notes}
+          />
         </label>
         <div className="modal-actions">
           <button type="button" className="cancel" onClick={close}>
             Annulla
           </button>
           <button className="save-action expense" disabled={working}>
-            {working ? "Creazione…" : "Crea finanziamento"}
+            {working
+              ? "Salvataggio…"
+              : financing
+                ? "Salva modifiche"
+                : "Crea finanziamento"}
           </button>
         </div>
       </form>
@@ -5396,6 +5560,7 @@ function FinancingSection({
   cards,
   refresh,
   onNew,
+  onEdit,
 }: {
   financings: MoneyFinancing[];
   recurrences: MoneyRecurrence[];
@@ -5404,10 +5569,13 @@ function FinancingSection({
   cards: MoneyCard[];
   refresh: () => Promise<void>;
   onNew: () => void;
+  onEdit: (item: MoneyFinancing) => void;
 }) {
   const [settling, setSettling] = useState<MoneyFinancing | null>(null);
   const [settlementAmount, setSettlementAmount] = useState("");
   const [working, setWorking] = useState(false);
+  const [deleting, setDeleting] = useState<MoneyFinancing | null>(null);
+  const [deletePaid, setDeletePaid] = useState(false);
   const paidRows = (item: MoneyFinancing) =>
     transactions.filter(
       (transaction) =>
@@ -5423,6 +5591,43 @@ function FinancingSection({
   const openSettlement = (item: MoneyFinancing) => {
     setSettling(item);
     setSettlementAmount(amountInput(remaining(item)));
+  };
+  const removeFinancing = async () => {
+    if (!deleting) return;
+    setWorking(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      await supabase
+        .from("transactions")
+        .delete()
+        .eq("recurrence_id", deleting.recurrenceId)
+        .is("confirmed_at", null);
+      if (deletePaid)
+        await supabase
+          .from("transactions")
+          .delete()
+          .eq("recurrence_id", deleting.recurrenceId);
+      const { error: financeError } = await supabase
+        .from("financings")
+        .delete()
+        .eq("id", deleting.id);
+      if (financeError) throw financeError;
+      const { error: recurrenceError } = await supabase
+        .from("recurrences")
+        .delete()
+        .eq("id", deleting.recurrenceId);
+      if (recurrenceError) throw recurrenceError;
+      setDeleting(null);
+      await refresh();
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Impossibile eliminare il finanziamento.",
+      );
+    } finally {
+      setWorking(false);
+    }
   };
   const settle = async () => {
     if (!settling) return;
@@ -5500,8 +5705,54 @@ function FinancingSection({
       financings.filter((item) => item.status === "settled"),
     ],
   ];
+  const today = toIsoDate(new Date());
+  const month = today.slice(0, 7);
+  const yearEnd = `${today.slice(0, 4)}-12-31`;
+  const financeSchedule = financings
+    .filter((item) => item.status === "active")
+    .flatMap((item) =>
+      item.installmentSchedule.map((rate) => ({
+        ...rate,
+        paid: transactions.some(
+          (transaction) =>
+            transaction.recurrenceId === item.recurrenceId &&
+            transaction.dueDate === rate.date &&
+            Boolean(transaction.confirmedAt),
+        ),
+      })),
+    );
+  const financeTotals = {
+    monthRemaining: financeSchedule
+      .filter(
+        (rate) =>
+          !rate.paid && rate.date >= today && rate.date.startsWith(month),
+      )
+      .reduce((sum, rate) => sum + rate.amount, 0),
+    yearRemaining: financeSchedule
+      .filter(
+        (rate) => !rate.paid && rate.date >= today && rate.date <= yearEnd,
+      )
+      .reduce((sum, rate) => sum + rate.amount, 0),
+    monthTotal: financeSchedule
+      .filter((rate) => rate.date.startsWith(month))
+      .reduce((sum, rate) => sum + rate.amount, 0),
+  };
   return (
     <section className="section-page financing-page">
+      <div className="subscription-summary">
+        <div>
+          <small>RIMANENTE QUESTO MESE</small>
+          <strong>{money(financeTotals.monthRemaining)}</strong>
+        </div>
+        <div>
+          <small>RIMANENTE QUEST’ANNO</small>
+          <strong>{money(financeTotals.yearRemaining)}</strong>
+        </div>
+        <div>
+          <small>TOTALE DEL MESE</small>
+          <strong>{money(financeTotals.monthTotal)}</strong>
+        </div>
+      </div>
       {groups.map(([title, items]) =>
         items.length ? (
           <div className="financing-group" key={title}>
@@ -5561,12 +5812,29 @@ function FinancingSection({
                       {account} · {money(item.regularInstallmentAmount)} al mese
                     </p>
                     {item.status === "active" && (
-                      <button
-                        className="outline financing-settle"
-                        onClick={() => openSettlement(item)}
-                      >
-                        Salda finanziamento
-                      </button>
+                      <div className="financing-actions">
+                        <button
+                          className="outline"
+                          onClick={() => onEdit(item)}
+                        >
+                          <AppIcon name="edit" size={15} /> Modifica
+                        </button>
+                        <button
+                          className="outline financing-settle"
+                          onClick={() => openSettlement(item)}
+                        >
+                          Salda
+                        </button>
+                        <button
+                          className="outline danger"
+                          onClick={() => {
+                            setDeleting(item);
+                            setDeletePaid(false);
+                          }}
+                        >
+                          <AppIcon name="trash" size={15} /> Elimina
+                        </button>
+                      </div>
                     )}
                   </article>
                 );
@@ -5628,6 +5896,57 @@ function FinancingSection({
                 onClick={() => void settle()}
               >
                 {working ? "Salvataggio…" : "Conferma saldo"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleting && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => !working && setDeleting(null)}
+        >
+          <div
+            className="modal entity-modal"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>ELIMINA FINANZIAMENTO</small>
+                <h2>{deleting.name}</h2>
+              </div>
+              <button onClick={() => setDeleting(null)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <p>
+              Le rate future e le transazioni ancora in attesa saranno sempre
+              eliminate.
+            </p>
+            <label className="delete-paid-choice">
+              <input
+                type="checkbox"
+                checked={deletePaid}
+                onChange={(event) => setDeletePaid(event.target.checked)}
+              />
+              <span>
+                <b>Elimina anche le rate già pagate</b>
+                <small>
+                  Se disattivato, le uscite già confermate rimangono nello
+                  storico.
+                </small>
+              </span>
+            </label>
+            <div className="modal-actions">
+              <button className="cancel" onClick={() => setDeleting(null)}>
+                Annulla
+              </button>
+              <button
+                className="save-action expense"
+                disabled={working}
+                onClick={() => void removeFinancing()}
+              >
+                {working ? "Eliminazione…" : "Elimina finanziamento"}
               </button>
             </div>
           </div>
@@ -7573,7 +7892,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.0.0</h2>
+          <h2>Money Elite versione 10.1.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -10352,7 +10671,9 @@ export default function Home() {
     refundSource?: Transaction;
     recurrenceEditId?: string;
   } | null>(null);
-  const [financingModal, setFinancingModal] = useState(false);
+  const [financingModal, setFinancingModal] = useState<
+    MoneyFinancing | "new" | null
+  >(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<MoneyAccount[]>([]);
   const [primaryCurrency, setPrimaryCurrency] = useState("EUR");
@@ -10759,15 +11080,64 @@ export default function Home() {
     }
     await refreshData(user);
   };
-  const saveFinancing = async (draft: FinancingDraft) => {
+  const saveFinancing = async (
+    draft: FinancingDraft,
+    existing?: MoneyFinancing,
+  ) => {
     if (!user) return;
     const supabase = getSupabaseBrowserClient();
     const regular =
+      draft.installmentSchedule[1]?.amount ??
+      draft.installmentSchedule[0]?.amount ??
       Math.floor((draft.totalRepayment / draft.installmentCount) * 100) / 100;
-    const finalAmount =
-      Math.round(
-        (draft.totalRepayment - regular * (draft.installmentCount - 1)) * 100,
-      ) / 100;
+    const finalAmount = draft.installmentSchedule.at(-1)?.amount ?? regular;
+    if (existing) {
+      const { error: recurrenceError } = await supabase
+        .from("recurrences")
+        .update({
+          account_id: draft.accountId,
+          card_id: draft.cardId,
+          category_id: draft.categoryId,
+          amount:
+            draft.installmentSchedule[
+              Math.min(
+                existing.installmentSchedule.length,
+                draft.installmentSchedule.length,
+              ) - 1
+            ]?.amount ?? regular,
+          occurrence_limit: draft.installmentCount,
+          next_date:
+            draft.installmentSchedule.find(
+              (_, index) =>
+                index >=
+                recurrences.find((item) => item.id === existing.recurrenceId)
+                  ?.occurrenceCount!,
+            )?.date ?? draft.firstDueDate,
+          automatic_accounting: draft.automaticAccounting,
+          notes: draft.name,
+        })
+        .eq("id", existing.recurrenceId);
+      if (recurrenceError) throw recurrenceError;
+      const { error: financeError } = await supabase
+        .from("financings")
+        .update({
+          name: draft.name,
+          lender: draft.lender || null,
+          purchase_amount: draft.purchaseAmount,
+          financed_amount: draft.financedAmount,
+          total_repayment: draft.totalRepayment,
+          installment_count: draft.installmentCount,
+          regular_installment_amount: regular,
+          final_installment_amount: finalAmount,
+          first_due_date: draft.firstDueDate,
+          installment_schedule: draft.installmentSchedule,
+          notes: draft.notes || null,
+        })
+        .eq("id", existing.id);
+      if (financeError) throw financeError;
+      await refreshData(user);
+      return;
+    }
     const { data: recurrence, error: recurrenceError } = await supabase
       .from("recurrences")
       .insert({
@@ -10804,6 +11174,7 @@ export default function Home() {
       first_due_date: draft.firstDueDate,
       status: "active",
       notes: draft.notes || null,
+      installment_schedule: draft.installmentSchedule,
     });
     if (financingError) {
       await supabase.from("recurrences").delete().eq("id", recurrence.id);
@@ -11211,15 +11582,16 @@ export default function Home() {
       (item) => item.recurrenceId === recurrence.id,
     );
     const installmentAmount =
-      financing && recurrence.occurrenceCount + 1 >= financing.installmentCount
-        ? financing.finalInstallmentAmount
-        : recurrence.amount;
+      financing?.installmentSchedule[recurrence.occurrenceCount]?.amount ??
+      recurrence.amount;
     const confirmationKey = `${recurrence.id}:${recurrence.nextDate}`;
     if (confirmingRecurrences.current.has(confirmationKey)) return;
     confirmingRecurrences.current.add(confirmationKey);
     setDataError("");
     const today = toIsoDate(new Date());
-    const optimisticNextDate = nextRecurrenceDate(recurrence);
+    const optimisticNextDate =
+      financing?.installmentSchedule[recurrence.occurrenceCount + 1]?.date ??
+      nextRecurrenceDate(recurrence);
     const optimisticCount = recurrence.occurrenceCount + 1;
     setRecurrences((current) =>
       current.map((item) =>
@@ -11309,7 +11681,9 @@ export default function Home() {
         .is("confirmed_at", null);
       if (confirmError) throw confirmError;
       const occurrenceCount = recurrence.occurrenceCount + 1;
-      const nextDate = nextRecurrenceDate(recurrence);
+      const nextDate =
+        financing?.installmentSchedule[occurrenceCount]?.date ??
+        nextRecurrenceDate(recurrence);
       const completedByLimit =
         recurrence.occurrenceLimit !== null &&
         occurrenceCount >= recurrence.occurrenceLimit;
@@ -11518,7 +11892,8 @@ export default function Home() {
                 openRecurrenceEditor(recurrence, true)
               }
               refresh={() => refreshData(user)}
-              onNewFinancing={() => setFinancingModal(true)}
+              onNewFinancing={() => setFinancingModal("new")}
+              onEditFinancing={(item) => setFinancingModal(item)}
               onAdd={(kind, defaultAccount, cardId) =>
                 setModal({ kind, preset: "normal", defaultAccount, cardId })
               }
@@ -11551,7 +11926,7 @@ export default function Home() {
       {active === "Finanziamenti" && (
         <button
           className="quick-main quick-standalone"
-          onClick={() => setFinancingModal(true)}
+          onClick={() => setFinancingModal("new")}
         >
           +
         </button>
@@ -11627,7 +12002,15 @@ export default function Home() {
           accounts={accounts}
           cards={cards}
           categories={categories}
-          close={() => setFinancingModal(false)}
+          financing={financingModal === "new" ? undefined : financingModal}
+          recurrence={
+            financingModal === "new"
+              ? undefined
+              : recurrences.find(
+                  (item) => item.id === financingModal.recurrenceId,
+                )
+          }
+          close={() => setFinancingModal(null)}
           save={saveFinancing}
         />
       )}

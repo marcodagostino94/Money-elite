@@ -13,6 +13,10 @@ Prima di pubblicare la versione 10, eseguire nel SQL Editor di Supabase il file:
 
 `supabase/migrations/20260930_financings.sql`
 
+Se la migrazione della versione 10 è già stata eseguita, applicare anche:
+
+`supabase/migrations/20260930_financings_v10_1.sql`
+
 La migrazione crea la tabella dei finanziamenti con RLS, policy e GRANT espliciti per `authenticated` e `service_role`.
 
 ## Avvio locale
