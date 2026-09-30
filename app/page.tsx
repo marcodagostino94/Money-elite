@@ -5203,17 +5203,20 @@ function FinancingModal({
     amountInput(financing?.totalRepayment),
   );
   const [installmentCountValue, setInstallmentCountValue] = useState(
-    financing?.installmentCount ?? 12,
+    String(financing?.installmentCount ?? 12),
   );
   const [firstDateValue, setFirstDateValue] = useState(
     financing?.firstDueDate ?? toIsoDate(new Date()),
   );
   const [schedule, setSchedule] = useState(
-    financing?.installmentSchedule ?? [],
+    (financing?.installmentSchedule ?? []).map((item) => ({
+      ...item,
+      amount: amountInput(item.amount),
+    })),
   );
   const generateSchedule = () => {
     const total = Math.abs(parseItalianAmount(totalValue));
-    const count = Math.max(1, installmentCountValue);
+    const count = Math.max(1, Number(installmentCountValue) || 1);
     if (!total) return;
     const base = Math.floor((total / count) * 100) / 100;
     const first = Math.round((total - base * (count - 1)) * 100) / 100;
@@ -5232,7 +5235,7 @@ function FinancingModal({
         return {
           number: index + 1,
           date: toIsoDate(date),
-          amount: index === 0 ? first : base,
+          amount: amountInput(index === 0 ? first : base),
         };
       }),
     );
@@ -5248,14 +5251,19 @@ function FinancingModal({
     const source = String(fd.get("source") || "");
     const installmentCount =
       schedule.length || Math.max(1, Number(fd.get("installments") || 1));
+    const normalizedSchedule = schedule.map((item) => ({
+      ...item,
+      amount: Math.abs(parseItalianAmount(item.amount)),
+    }));
     const purchaseAmount = Math.abs(
       parseItalianAmount(fd.get("purchaseAmount")),
     );
     const financedAmount =
       Math.abs(parseItalianAmount(fd.get("financedAmount"))) || purchaseAmount;
-    const totalRepayment = schedule.length
-      ? Math.round(schedule.reduce((sum, item) => sum + item.amount, 0) * 100) /
-        100
+    const totalRepayment = normalizedSchedule.length
+      ? Math.round(
+          normalizedSchedule.reduce((sum, item) => sum + item.amount, 0) * 100,
+        ) / 100
       : Math.abs(parseItalianAmount(fd.get("totalRepayment"))) ||
         financedAmount;
     const categoryId = String(fd.get("category") || rootId);
@@ -5289,7 +5297,7 @@ function FinancingModal({
           categoryId,
           automaticAccounting,
           notes: String(fd.get("notes") || "").trim(),
-          installmentSchedule: schedule,
+          installmentSchedule: normalizedSchedule,
         },
         financing,
       );
@@ -5381,14 +5389,16 @@ function FinancingModal({
             <input
               name="installments"
               required
-              type="number"
-              min="1"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={installmentCountValue}
               onChange={(event) =>
-                setInstallmentCountValue(
-                  Math.max(1, Number(event.target.value) || 1),
-                )
+                setInstallmentCountValue(event.target.value.replace(/\D/g, ""))
               }
+              onBlur={() => {
+                if (!installmentCountValue) setInstallmentCountValue("1");
+              }}
             />
           </label>
         </div>
@@ -5415,7 +5425,13 @@ function FinancingModal({
               <b>Piano rateale</b>
               <span>
                 Totale{" "}
-                {money(schedule.reduce((sum, item) => sum + item.amount, 0))}
+                {money(
+                  schedule.reduce(
+                    (sum, item) =>
+                      sum + Math.abs(parseItalianAmount(item.amount)),
+                    0,
+                  ),
+                )}
               </span>
             </div>
             {schedule.map((item, index) => (
@@ -5434,23 +5450,23 @@ function FinancingModal({
                     )
                   }
                 />
-                <div className="amount-input">
-                  <span>EUR</span>
+                <label className="installment-amount-field">
+                  <span>€</span>
                   <input
                     inputMode="decimal"
-                    value={amountInput(item.amount)}
+                    value={item.amount}
+                    aria-label={`Importo rata ${item.number}`}
                     onChange={(event) => {
-                      const amount = Math.abs(
-                        parseItalianAmount(event.target.value),
-                      );
                       setSchedule((current) =>
                         current.map((row, rowIndex) =>
-                          rowIndex === index ? { ...row, amount } : row,
+                          rowIndex === index
+                            ? { ...row, amount: event.target.value }
+                            : row,
                         ),
                       );
                     }}
                   />
-                </div>
+                </label>
               </div>
             ))}
           </div>
@@ -7892,7 +7908,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.1.0</h2>
+          <h2>Money Elite versione 10.2.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -7935,8 +7951,9 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Il debito delle carte considera tutti i cicli non ancora ripagati,
-              mantenendo separato il riepilogo del ciclo corrente.
+              Migliorata la modifica delle rate dei finanziamenti su iPhone e
+              Mac, con importi sempre leggibili e numero rate liberamente
+              riscrivibile.
             </p>
           </div>
         </article>

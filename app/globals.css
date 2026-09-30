@@ -9039,7 +9039,7 @@ header h1 {
 }
 .installment-edit-row {
   display: grid;
-  grid-template-columns: 65px 1fr 130px;
+  grid-template-columns: 70px minmax(160px, 1fr) minmax(120px, 150px);
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -9051,8 +9051,38 @@ header h1 {
 .installment-edit-row input {
   min-width: 0;
 }
-.installment-edit-row .amount-input {
-  height: 39px;
+.installment-amount-field {
+  display: grid !important;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  height: 42px;
+  margin: 0 !important;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.installment-amount-field > span {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  color: #666;
+  background: #f5f3ef;
+  font-size: 14px;
+  font-weight: 800;
+}
+.installment-amount-field > input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 10px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-size: 15px !important;
+  font-weight: 750 !important;
+  text-align: right;
 }
 .delete-paid-choice {
   display: flex !important;
@@ -9082,9 +9112,12 @@ header h1 {
     grid-template-columns: 1fr;
   }
   .installment-edit-row {
-    grid-template-columns: 52px 1fr;
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 8px;
   }
-  .installment-edit-row .amount-input {
+  .installment-edit-row > input[type="date"],
+  .installment-amount-field {
     grid-column: 2;
+    width: 100%;
   }
 }
