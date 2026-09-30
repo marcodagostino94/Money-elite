@@ -5170,6 +5170,7 @@ function FinancingModal({
   accounts,
   cards,
   categories,
+  transactions,
   financing,
   recurrence,
   close,
@@ -5178,6 +5179,7 @@ function FinancingModal({
   accounts: MoneyAccount[];
   cards: MoneyCard[];
   categories: MoneyCategory[];
+  transactions: Transaction[];
   financing?: MoneyFinancing;
   recurrence?: MoneyRecurrence;
   close: () => void;
@@ -5213,6 +5215,18 @@ function FinancingModal({
       ...item,
       amount: amountInput(item.amount),
     })),
+  );
+  const paidDueDates = new Set(
+    financing
+      ? transactions
+          .filter(
+            (item) =>
+              item.recurrenceId === financing.recurrenceId &&
+              Boolean(item.confirmedAt) &&
+              Boolean(item.dueDate),
+          )
+          .map((item) => item.dueDate!)
+      : [],
   );
   const generateSchedule = () => {
     const total = Math.abs(parseItalianAmount(totalValue));
@@ -5434,41 +5448,58 @@ function FinancingModal({
                 )}
               </span>
             </div>
-            {schedule.map((item, index) => (
-              <div className="installment-edit-row" key={item.number}>
-                <b>Rata {item.number}</b>
-                <input
-                  type="date"
-                  value={item.date}
-                  onChange={(event) =>
-                    setSchedule((current) =>
-                      current.map((row, rowIndex) =>
-                        rowIndex === index
-                          ? { ...row, date: event.target.value }
-                          : row,
-                      ),
-                    )
-                  }
-                />
-                <label className="installment-amount-field">
-                  <span>€</span>
+            {schedule.map((item, index) => {
+              const paymentState = financing
+                ? paidDueDates.has(item.date)
+                  ? "paid"
+                  : "unpaid"
+                : "";
+              return (
+                <div
+                  className={`installment-edit-row ${paymentState}`}
+                  key={item.number}
+                >
+                  <b>
+                    Rata {item.number}
+                    {paymentState && (
+                      <small>
+                        {paymentState === "paid" ? "PAGATA" : "DA PAGARE"}
+                      </small>
+                    )}
+                  </b>
                   <input
-                    inputMode="decimal"
-                    value={item.amount}
-                    aria-label={`Importo rata ${item.number}`}
-                    onChange={(event) => {
+                    type="date"
+                    value={item.date}
+                    onChange={(event) =>
                       setSchedule((current) =>
                         current.map((row, rowIndex) =>
                           rowIndex === index
-                            ? { ...row, amount: event.target.value }
+                            ? { ...row, date: event.target.value }
                             : row,
                         ),
-                      );
-                    }}
+                      )
+                    }
                   />
-                </label>
-              </div>
-            ))}
+                  <label className="installment-amount-field">
+                    <span>€</span>
+                    <input
+                      inputMode="decimal"
+                      value={item.amount}
+                      aria-label={`Importo rata ${item.number}`}
+                      onChange={(event) => {
+                        setSchedule((current) =>
+                          current.map((row, rowIndex) =>
+                            rowIndex === index
+                              ? { ...row, amount: event.target.value }
+                              : row,
+                          ),
+                        );
+                      }}
+                    />
+                  </label>
+                </div>
+              );
+            })}
           </div>
         )}
         <label>
@@ -7908,7 +7939,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.2.0</h2>
+          <h2>Money Elite versione 10.3.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -7951,9 +7982,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Migliorata la modifica delle rate dei finanziamenti su iPhone e
-              Mac, con importi sempre leggibili e numero rate liberamente
-              riscrivibile.
+              Le rate dei finanziamenti mantengono il collegamento alla loro
+              scadenza anche quando si corregge la data effettiva di pagamento.
             </p>
           </div>
         </article>
@@ -9684,6 +9714,9 @@ function TransactionModal({
       frequency,
       intervalCount,
       occurrenceLimit: occurrenceLimit > 0 ? occurrenceLimit : null,
+      recurrenceId: editing ? (initial?.recurrenceId ?? null) : null,
+      dueDate: editing ? (initial?.dueDate ?? null) : null,
+      confirmedAt: editing ? (initial?.confirmedAt ?? null) : null,
     });
   };
   return (
@@ -11018,6 +11051,12 @@ export default function Home() {
       }
       recurrenceId = recurrence?.id ?? null;
     }
+    const keepsOriginalInstallmentLink = Boolean(
+      modal?.editing &&
+      transaction.recurrenceId &&
+      transaction.dueDate &&
+      transaction.confirmedAt,
+    );
     const payload = {
       user_id: user.id,
       kind: transaction.isRefund
@@ -11051,8 +11090,14 @@ export default function Home() {
       transaction_date: transaction.dateISO ?? toIsoDate(new Date()),
       due_date: transaction.planned
         ? (transaction.dateISO ?? toIsoDate(new Date()))
-        : null,
-      confirmed_at: transaction.planned ? null : new Date().toISOString(),
+        : keepsOriginalInstallmentLink
+          ? transaction.dueDate
+          : null,
+      confirmed_at: transaction.planned
+        ? null
+        : keepsOriginalInstallmentLink
+          ? transaction.confirmedAt
+          : new Date().toISOString(),
       accounted_at: transaction.accounted ? new Date().toISOString() : null,
       notes: transaction.notes?.trim() || null,
     };
@@ -11070,10 +11115,16 @@ export default function Home() {
       categoryColor: optimisticVisual?.color ?? transaction.categoryColor,
       dateISO: transaction.dateISO ?? toIsoDate(new Date()),
       date: formatItalianDate(transaction.dateISO ?? toIsoDate(new Date())),
-      confirmedAt: transaction.planned ? null : new Date().toISOString(),
+      confirmedAt: transaction.planned
+        ? null
+        : keepsOriginalInstallmentLink
+          ? transaction.confirmedAt
+          : new Date().toISOString(),
       dueDate: transaction.planned
         ? (transaction.dateISO ?? toIsoDate(new Date()))
-        : null,
+        : keepsOriginalInstallmentLink
+          ? transaction.dueDate
+          : null,
       accounted: Boolean(transaction.accounted),
     };
     setTransactions((current) =>
@@ -12019,6 +12070,7 @@ export default function Home() {
           accounts={accounts}
           cards={cards}
           categories={categories}
+          transactions={transactions}
           financing={financingModal === "new" ? undefined : financingModal}
           recurrence={
             financingModal === "new"

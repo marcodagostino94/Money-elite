@@ -9023,6 +9023,9 @@ header h1 {
   overflow: hidden;
   max-height: 310px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .installment-editor-head {
   position: sticky;
@@ -9047,6 +9050,28 @@ header h1 {
 }
 .installment-edit-row > b {
   font-size: 11px;
+}
+.installment-edit-row > b small {
+  display: block;
+  margin-top: 3px;
+  font-size: 7px;
+  letter-spacing: 0.45px;
+}
+.installment-edit-row.paid {
+  background: #f0faf4;
+  box-shadow: inset 3px 0 #35a866;
+}
+.installment-edit-row.paid > b,
+.installment-edit-row.paid > b small {
+  color: #25864e;
+}
+.installment-edit-row.unpaid {
+  background: #fff5f4;
+  box-shadow: inset 3px 0 #d35c55;
+}
+.installment-edit-row.unpaid > b,
+.installment-edit-row.unpaid > b small {
+  color: #b34843;
 }
 .installment-edit-row input {
   min-width: 0;
@@ -9114,6 +9139,11 @@ header h1 {
   .installment-edit-row {
     grid-template-columns: 58px minmax(0, 1fr);
     gap: 8px;
+  }
+  .financing-modal .installment-editor {
+    max-height: none;
+    overflow: visible;
+    touch-action: auto;
   }
   .installment-edit-row > input[type="date"],
   .installment-amount-field {
