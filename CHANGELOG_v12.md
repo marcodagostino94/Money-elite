@@ -1,4 +1,12 @@
-# Money Elite 12.2.0
+# Money Elite 12.3.0
+
+## Novità 12.3
+
+- Il consuntivo può essere eliminato oltre che modificato.
+- Al primo inserimento del consuntivo si apre automaticamente il nuovo preventivo della stessa gestione, con il saldo precedente già riportato.
+- Le spese straordinarie possono essere divise in una o più rate mensili.
+- Importi, descrizioni e scadenze delle rate straordinarie restano modificabili prima del salvataggio.
+- Ogni rata straordinaria può essere inclusa o esclusa singolarmente dalle transazioni pianificate.
 
 ## Correzioni 12.2
 

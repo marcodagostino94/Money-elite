@@ -584,45 +584,47 @@ export function CondominiumSection({
               extraMode.kind === "settlement" ? previousBalance : 0
             }
             onClose={() => setExtraMode(null)}
-            onSave={async (draft, wantsPlanned) => {
+            onSave={async (drafts) => {
               setWorking(true);
-              let createdRecurrenceId: string | null = null;
+              const createdRecurrenceIds: string[] = [];
               try {
-                const recurrenceId = wantsPlanned
-                  ? await createPlanned(draft, selected.managementType)
-                  : null;
-                createdRecurrenceId = recurrenceId;
                 const supabase = getSupabaseBrowserClient();
                 const {
                   data: { user },
                 } = await supabase.auth.getUser();
                 if (!user) return;
                 const category = categoryFor(selected.managementType);
-                const { error } = await supabase
-                  .from("condominium_installments")
-                  .insert({
-                    user_id: user.id,
-                    period_id: selected.id,
-                    source_period_id: extraMode.source?.id || null,
-                    kind: extraMode.kind,
-                    description: draft.description,
-                    amount: draft.amount,
-                    original_amount: draft.amount,
-                    due_date: draft.dueDate,
-                    account_id: draft.accountId,
-                    category_id: category?.id || null,
-                    planned_recurrence_id: recurrenceId,
-                    notes: draft.notes || null,
-                  });
-                if (error) throw error;
+                for (const draft of drafts) {
+                  const recurrenceId = draft.createPlanned
+                    ? await createPlanned(draft, selected.managementType)
+                    : null;
+                  if (recurrenceId) createdRecurrenceIds.push(recurrenceId);
+                  const { error } = await supabase
+                    .from("condominium_installments")
+                    .insert({
+                      user_id: user.id,
+                      period_id: selected.id,
+                      source_period_id: extraMode.source?.id || null,
+                      kind: extraMode.kind,
+                      description: draft.description,
+                      amount: draft.amount,
+                      original_amount: draft.amount,
+                      due_date: draft.dueDate,
+                      account_id: draft.accountId,
+                      category_id: category?.id || null,
+                      planned_recurrence_id: recurrenceId,
+                      notes: draft.notes || null,
+                    });
+                  if (error) throw error;
+                }
                 setExtraMode(null);
                 await Promise.all([load(), refreshMoney()]);
               } catch (error) {
-                if (createdRecurrenceId)
+                for (const recurrenceId of createdRecurrenceIds)
                   await getSupabaseBrowserClient()
                     .from("recurrences")
                     .delete()
-                    .eq("id", createdRecurrenceId);
+                    .eq("id", recurrenceId);
                 alert(
                   error instanceof Error
                     ? error.message
@@ -687,9 +689,25 @@ export function CondominiumSection({
             period={finalPeriod}
             onClose={() => setFinalPeriod(null)}
             onSave={async (amount) => {
+              const wasNew = finalPeriod.finalAmount == null;
+              const managementType = finalPeriod.managementType;
               const { error } = await getSupabaseBrowserClient()
                 .from("condominium_periods")
                 .update({ final_amount: amount })
+                .eq("id", finalPeriod.id);
+              if (error) return alert(error.message);
+              setFinalPeriod(null);
+              await load();
+              if (wasNew) {
+                setSelectedId(null);
+                setNewType(managementType);
+              }
+            }}
+            onDelete={async () => {
+              if (!window.confirm("Eliminare il consuntivo inserito?")) return;
+              const { error } = await getSupabaseBrowserClient()
+                .from("condominium_periods")
+                .update({ final_amount: null })
                 .eq("id", finalPeriod.id);
               if (error) return alert(error.message);
               setFinalPeriod(null);
@@ -1032,8 +1050,10 @@ function NewPeriodModal({
   }) => Promise<void>;
 }) {
   const now = new Date();
-  const defaultYear =
-    type === "ordinary"
+  const previousStartYear = Number(previous?.label.split("/")[0]);
+  const defaultYear = Number.isFinite(previousStartYear)
+    ? previousStartYear + 1
+    : type === "ordinary"
       ? now.getFullYear()
       : now.getMonth() >= 6
         ? now.getFullYear()
@@ -1433,8 +1453,65 @@ function InstallmentModal({
   accounts: MoneyAccount[];
   defaultAmount: number;
   onClose: () => void;
-  onSave: (draft: InstallmentDraft, wantsPlanned: boolean) => Promise<void>;
+  onSave: (
+    drafts: Array<InstallmentDraft & { createPlanned: boolean }>,
+  ) => Promise<void>;
 }) {
+  const extraordinary = mode.kind === "extraordinary";
+  const [description, setDescription] = useState(
+    extraordinary
+      ? "Rata straordinaria"
+      : `Saldo consuntivo ${mode.source?.label || "precedente"}`,
+  );
+  const [amountText, setAmountText] = useState(amountValue(defaultAmount));
+  const [countText, setCountText] = useState("1");
+  const [firstDate, setFirstDate] = useState(toIsoDate(new Date()));
+  const [accountId, setAccountId] = useState(
+    accounts.find((item) => !item.archived && !item.hidden && !item.isContainer)
+      ?.id || "",
+  );
+  const [notes, setNotes] = useState("");
+  const [schedule, setSchedule] = useState<ScheduleDraft[]>([]);
+  const total = Math.abs(parseAmount(amountText));
+  const count = extraordinary ? Math.max(1, Number(countText) || 1) : 1;
+  const calculate = () => {
+    const amounts = splitAmount(total, count);
+    const start = new Date(`${firstDate}T12:00:00`);
+    setSchedule(
+      amounts.map((amount, index) => {
+        const date = new Date(start);
+        date.setMonth(date.getMonth() + index);
+        return {
+          description:
+            count === 1 ? description : `${description} ${index + 1}/${count}`,
+          amount: amountValue(amount),
+          date: toIsoDate(date),
+          createPlanned: true,
+        };
+      }),
+    );
+  };
+  const updateAmount = (index: number, value: string) => {
+    setSchedule((current) => {
+      const next = current.map((item, position) =>
+        position === index ? { ...item, amount: value } : item,
+      );
+      const following = next.length - index - 1;
+      if (following <= 0) return next;
+      const used = next
+        .slice(0, index + 1)
+        .reduce((sum, item) => sum + Math.abs(parseAmount(item.amount)), 0);
+      const redistributed = splitAmount(Math.max(0, total - used), following);
+      return next.map((item, position) =>
+        position > index
+          ? {
+              ...item,
+              amount: amountValue(redistributed[position - index - 1]),
+            }
+          : item,
+      );
+    });
+  };
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <form
@@ -1442,19 +1519,23 @@ function InstallmentModal({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event: FormEvent<HTMLFormElement>) => {
           event.preventDefault();
-          const fd = new FormData(event.currentTarget);
-          const wantsPlanned = window.confirm(
-            "Vuoi aggiungere questa rata anche alle transazioni pianificate?",
+          if (!schedule.length)
+            return alert("Premi Calcola rate prima di salvare.");
+          const scheduleTotal = schedule.reduce(
+            (sum, row) => sum + Math.abs(parseAmount(row.amount)),
+            0,
           );
+          if (Math.abs(scheduleTotal - total) > 0.009)
+            return alert("La somma delle rate deve coincidere con il totale.");
           void onSave(
-            {
-              description: String(fd.get("description")),
-              amount: Math.abs(parseAmount(fd.get("amount"))),
-              dueDate: String(fd.get("dueDate")),
-              accountId: String(fd.get("account")),
-              notes: String(fd.get("notes") || "").trim(),
-            },
-            wantsPlanned,
+            schedule.map((row) => ({
+              description: row.description,
+              amount: Math.abs(parseAmount(row.amount)),
+              dueDate: row.date,
+              accountId,
+              notes: notes.trim(),
+              createPlanned: row.createPlanned,
+            })),
           );
         }}
       >
@@ -1474,36 +1555,48 @@ function InstallmentModal({
         <label>
           Descrizione
           <input
-            name="description"
             required
-            defaultValue={
-              mode.kind === "settlement"
-                ? `Saldo consuntivo ${mode.source?.label || "precedente"}`
-                : "Rata straordinaria"
-            }
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
           />
         </label>
         <label>
           Importo
           <input
-            name="amount"
             inputMode="decimal"
             required
-            defaultValue={amountValue(defaultAmount)}
+            value={amountText}
+            onChange={(event) => setAmountText(event.target.value)}
           />
         </label>
+        {extraordinary && (
+          <label>
+            Numero rate
+            <input
+              type="number"
+              min="1"
+              max="36"
+              value={countText}
+              onChange={(event) => setCountText(event.target.value)}
+            />
+          </label>
+        )}
         <label>
-          Scadenza
+          {count > 1 ? "Scadenza prima rata" : "Scadenza"}
           <input
-            name="dueDate"
             type="date"
             required
-            defaultValue={toIsoDate(new Date())}
+            value={firstDate}
+            onChange={(event) => setFirstDate(event.target.value)}
           />
         </label>
         <label>
           Conto
-          <select name="account" required>
+          <select
+            required
+            value={accountId}
+            onChange={(event) => setAccountId(event.target.value)}
+          >
             {accounts
               .filter(
                 (item) => !item.archived && !item.hidden && !item.isContainer,
@@ -1517,13 +1610,89 @@ function InstallmentModal({
         </label>
         <label>
           Note
-          <textarea name="notes" />
+          <textarea
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+          />
         </label>
+        <button
+          type="button"
+          className="outline calculate-installments"
+          onClick={calculate}
+        >
+          Calcola rate
+        </button>
+        {schedule.length > 0 && (
+          <div className="condominium-schedule-editor extraordinary-schedule">
+            <div className="schedule-editor-heading">
+              <span>Rate da creare</span>
+              <small>Seleziona le transazioni pianificate</small>
+            </div>
+            {schedule.map((row, index) => (
+              <div className="condominium-schedule-row" key={index}>
+                <input
+                  type="checkbox"
+                  checked={row.createPlanned}
+                  onChange={() =>
+                    setSchedule((current) =>
+                      current.map((item, position) =>
+                        position === index
+                          ? { ...item, createPlanned: !item.createPlanned }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  value={row.description}
+                  onChange={(event) =>
+                    setSchedule((current) =>
+                      current.map((item, position) =>
+                        position === index
+                          ? { ...item, description: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  type="date"
+                  value={row.date}
+                  onChange={(event) =>
+                    setSchedule((current) =>
+                      current.map((item, position) =>
+                        position === index
+                          ? { ...item, date: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+                <input
+                  inputMode="decimal"
+                  value={row.amount}
+                  onChange={(event) => updateAmount(index, event.target.value)}
+                />
+                <small>
+                  {money(Math.abs(parseAmount(row.amount)))} · Casa ›{" "}
+                  {mode.period.managementType === "ordinary"
+                    ? "Condominio"
+                    : "Riscaldamento"}
+                </small>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="modal-actions">
           <button type="button" className="cancel" onClick={onClose}>
             Annulla
           </button>
-          <button className="save-action transfer">Salva rata</button>
+          <button
+            className="save-action transfer"
+            disabled={!schedule.length || !accountId}
+          >
+            {schedule.length > 1 ? "Salva rate" : "Salva rata"}
+          </button>
         </div>
       </form>
     </div>
@@ -1623,10 +1792,12 @@ function FinalModal({
   period,
   onClose,
   onSave,
+  onDelete,
 }: {
   period: Period;
   onClose: () => void;
   onSave: (amount: number) => Promise<void>;
+  onDelete: () => Promise<void>;
 }) {
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -1669,6 +1840,11 @@ function FinalModal({
           />
         </label>
         <div className="modal-actions">
+          {period.finalAmount != null && (
+            <button type="button" className="danger" onClick={onDelete}>
+              Elimina consuntivo
+            </button>
+          )}
           <button type="button" className="cancel" onClick={onClose}>
             Annulla
           </button>
