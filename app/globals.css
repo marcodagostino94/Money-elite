@@ -3333,6 +3333,17 @@ header h1 {
   display: block;
   margin: 0;
 }
+.condominium-edit-final {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 0;
+  color: #7651c6;
+  border: 0;
+  background: transparent;
+  font-size: 9px;
+}
 .condominium-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,4 +1,9 @@
-# Money Elite 12.1.0
+# Money Elite 12.2.0
+
+## Correzioni 12.2
+
+- Il consuntivo già inserito può essere modificato dal pulsante della gestione e direttamente dal riepilogo finale.
+- Aggiunta una copia visibile del workflow GitHub Pages per facilitare la sostituzione del vecchio file nel repository.
 
 ## Correzioni 12.1
 

@@ -463,7 +463,15 @@ export function CondominiumSection({
             <Plus size={15} /> Rata straordinaria
           </button>
           <button className="outline" onClick={() => setFinalPeriod(selected)}>
-            <ReceiptText size={15} /> Aggiungi consuntivo
+            {selected.finalAmount == null ? (
+              <>
+                <ReceiptText size={15} /> Aggiungi consuntivo
+              </>
+            ) : (
+              <>
+                <Pencil size={15} /> Modifica consuntivo
+              </>
+            )}
           </button>
           {previous && previousBalance > 0 && (
             <button
@@ -548,6 +556,12 @@ export function CondominiumSection({
             <div>
               <small>CONSUNTIVO {selected.label}</small>
               <h3>{money(selected.finalAmount)}</h3>
+              <button
+                className="condominium-edit-final"
+                onClick={() => setFinalPeriod(selected)}
+              >
+                <Pencil size={12} /> Modifica consuntivo
+              </button>
             </div>
             <div className={balance > 0 ? "negative" : "positive"}>
               <small>DIFFERENZA TRA VERSATO E CONSUNTIVO</small>
@@ -1631,7 +1645,11 @@ function FinalModal({
         <div className="modal-title">
           <div>
             <small>GESTIONE {period.label}</small>
-            <h2>Inserisci consuntivo</h2>
+            <h2>
+              {period.finalAmount == null
+                ? "Inserisci consuntivo"
+                : "Modifica consuntivo"}
+            </h2>
           </div>
           <button type="button" onClick={onClose}>
             <X />
@@ -1654,7 +1672,9 @@ function FinalModal({
           <button type="button" className="cancel" onClick={onClose}>
             Annulla
           </button>
-          <button className="save-action transfer">Salva consuntivo</button>
+          <button className="save-action transfer">
+            {period.finalAmount == null ? "Salva consuntivo" : "Salva modifica"}
+          </button>
         </div>
       </form>
     </div>
