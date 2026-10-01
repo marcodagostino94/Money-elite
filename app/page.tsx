@@ -919,9 +919,20 @@ const iconMap: Record<string, L.LucideIcon> = {
   calculator: L.Calculator,
   phone: L.Phone,
   wifi: L.Wifi,
+  barber: L.Scissors,
+  headphones: L.Headphones,
 };
 
 function AppIcon({ name, size = 18 }: { name: string; size?: number }) {
+  if (name === "brand-apple")
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M16.7 12.7c0-2.6 2.1-3.9 2.2-4-1.2-1.8-3.2-2-3.9-2-1.7-.2-3.2 1-4.1 1-.9 0-2.2-1-3.7-1-1.9 0-3.7 1.1-4.7 2.8-2 3.4-.5 8.5 1.4 11.2.9 1.3 2 2.8 3.5 2.7 1.4-.1 1.9-.9 3.6-.9 1.7 0 2.1.9 3.6.9 1.5 0 2.5-1.3 3.4-2.7 1.1-1.5 1.5-3 1.5-3.1-.1 0-2.9-1.1-2.9-4.9ZM13.9 5c.8-1 1.3-2.4 1.2-3.8-1.2.1-2.7.8-3.5 1.8-.7.8-1.4 2.2-1.2 3.5 1.3.1 2.7-.6 3.5-1.5Z"
+        />
+      </svg>
+    );
   if (name === "brand-spotify")
     return (
       <svg
@@ -964,6 +975,163 @@ function AppIcon({ name, size = 18 }: { name: string; size?: number }) {
         />
       </svg>
     );
+  if (name === "brand-sky-netflix")
+    return (
+      <svg width={size} height={size} viewBox="0 0 28 24" aria-hidden="true">
+        <text
+          x="1"
+          y="10"
+          fill="currentColor"
+          fontSize="8"
+          fontWeight="800"
+          fontStyle="italic"
+        >
+          sky
+        </text>
+        <path
+          d="M17 4v16M17 4l8 16M25 4v16"
+          stroke="currentColor"
+          strokeWidth="2.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  if (name === "brand-amazon")
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <text x="6" y="15" fill="currentColor" fontSize="15" fontWeight="800">
+          a
+        </text>
+        <path
+          d="M4.5 18c4.4 2.7 9.5 2.8 14.3.3M16.8 17.3l2.4.5-.8 2.2"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  if (name === "brand-allianz")
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <circle
+          cx="12"
+          cy="12"
+          r="9.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+        />
+        <path
+          d="M7.5 7.5v9M12 6v12M16.5 7.5v9"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  if (name === "light-gas")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M9.5 14.5c-1.8-1-3-2.9-3-5a5.5 5.5 0 0 1 11 0c0 1.4-.5 2.6-1.3 3.6M9.5 17h4M10.3 20h2.4"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinecap="round"
+        />
+        <path
+          d="M17.5 20.5c-2 0-3.3-1.4-3.3-3.1 0-1.9 1.6-3.1 2.7-4.6.2 1.4 1.4 2.1 2.1 3.2.5-.6.8-1.2.9-1.9 1.2 1.2 1.8 2.3 1.8 3.5 0 1.6-1.4 2.9-3.2 2.9Z"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  if (name === "perfume-bottle")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M9 3h6v3H9zM10 6v2l-3 2v10h10V10l-3-2V6M8.5 13.5h7v4h-7z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M16 5h3"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  if (name === "broom")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="m15.8 3-6 10M8.8 12l6 3.6-3.2 5.4-8-4.8L7 12.8c.5-.5 1.2-.8 1.8-.8Z"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="m6.2 15.1 6 3.6M9.5 13.2l6 3.6"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+      </svg>
+    );
+  if (name === "rental-car")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M3 14.5 5 9h10l2 5.5V19h-2v-2H5v2H3v-4.5ZM5 14h10M6.5 11h7"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle
+          cx="18.5"
+          cy="7"
+          r="2.2"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        />
+        <path
+          d="M20.6 7H23M22 7v1.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
   if (name === "bank-logo-revolut" || name === "bank-logo-mediolanum")
     return (
       <img
@@ -997,9 +1165,12 @@ const categoryIcon = (name: string) => {
     Abbonamenti: "subscriptions",
     Alimenti: "groceries",
     "Altri lavori": "work",
-    Amazon: "package",
-    Apple: "apple",
-    "App Store": "apple",
+    Amazon: "brand-amazon",
+    Apple: "brand-apple",
+    "App Store": "brand-apple",
+    "Assicurazione auto": "brand-allianz",
+    Assicurazione: "brand-allianz",
+    Allianz: "brand-allianz",
     Arredamento: "furniture",
     Automobile: "car",
     Bar: "coffee",
@@ -1012,7 +1183,7 @@ const categoryIcon = (name: string) => {
     ChatGPT: "brand-chatgpt",
     Cinema: "cinema",
     Condominio: "building",
-    Cosmesi: "perfume",
+    Cosmesi: "perfume-bottle",
     "Cura Personale": "health",
     Discoteca: "music",
     Divertimento: "fun",
@@ -1028,18 +1199,18 @@ const categoryIcon = (name: string) => {
     Lavori: "hammer",
     "Lenti a contatto": "eye",
     Luce: "light",
-    "Luce e Gas": "energy",
+    "Luce e Gas": "light-gas",
     Mare: "sea",
     Medici: "stethoscope",
     Occhiali: "glasses",
     Multe: "justice",
-    Noleggio: "car",
+    Noleggio: "rental-car",
     Parcheggio: "parking",
     "Pranzi/Cene": "food",
     "Pranzi/Cene Viaggi": "food",
     "Prodotti Casa": "cleaning",
     "Proventi Finanziari": "finance",
-    Pulizie: "cleaning",
+    Pulizie: "broom",
     Reddito: "income",
     Regali: "gift",
     Regalo: "gift",
@@ -1049,9 +1220,12 @@ const categoryIcon = (name: string) => {
     Salute: "health",
     Scommesse: "betting",
     Scooter: "bike",
-    "Sky e Netflix": "tv",
+    "Sky e Netflix": "brand-sky-netflix",
     "Spese Personali": "clothes",
     Spotify: "brand-spotify",
+    Barbiere: "barber",
+    Cuffie: "headphones",
+    Profumo: "perfume-bottle",
     Sport: "sport",
     Stipendio: "finance",
     Straordinari: "clock",
@@ -8050,7 +8224,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.8.0</h2>
+          <h2>Money Elite versione 10.9.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8093,8 +8267,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Ampliato il catalogo delle icone master con simboli specifici per
-              tutte le principali categorie e i servizi più usati.
+              Aggiunti loghi e simboli dedicati per servizi, utenze, cura
+              personale, pulizie, audio, assicurazione e noleggio auto.
             </p>
           </div>
         </article>
@@ -8302,9 +8476,12 @@ function CategoryManagement({
     "subscriptions",
     "streaming",
     "tv",
+    "brand-sky-netflix",
     "brand-spotify",
     "brand-chatgpt",
-    "apple",
+    "brand-apple",
+    "brand-amazon",
+    "brand-allianz",
     "mail",
     "cloud",
     "technology",
@@ -8323,6 +8500,12 @@ function CategoryManagement({
     "personal",
     "clock",
     "calculator",
+    "light-gas",
+    "barber",
+    "perfume-bottle",
+    "broom",
+    "headphones",
+    "rental-car",
   ];
   const iconLabels: Record<string, string> = {
     home: "Casa",
@@ -8367,9 +8550,12 @@ function CategoryManagement({
     subscriptions: "Abbonamenti",
     streaming: "Streaming",
     tv: "TV",
+    "brand-sky-netflix": "Sky e Netflix",
     "brand-spotify": "Spotify",
     "brand-chatgpt": "ChatGPT",
-    apple: "Apple",
+    "brand-apple": "Apple",
+    "brand-amazon": "Amazon",
+    "brand-allianz": "Assicurazione auto Allianz",
     mail: "Busta lettera o mail",
     cloud: "Cloud",
     technology: "Tecnologia",
@@ -8388,6 +8574,12 @@ function CategoryManagement({
     personal: "Cura personale",
     clock: "Straordinari o tempo",
     calculator: "Calcoli o contabilità",
+    "light-gas": "Luce e gas",
+    barber: "Forbici da barbiere",
+    "perfume-bottle": "Profumo",
+    broom: "Scopa o pulizie",
+    headphones: "Cuffie",
+    "rental-car": "Noleggio auto",
   };
   const visible = categories
     .filter(
