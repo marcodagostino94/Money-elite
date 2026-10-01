@@ -195,6 +195,45 @@ create table budgets (
   )
 );
 
+create table condominium_periods (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  management_type text not null check (management_type in ('ordinary','heating')),
+  label text not null,
+  start_date date not null,
+  end_date date not null,
+  budget_amount numeric(14,2) not null default 0 check (budget_amount >= 0),
+  final_amount numeric(14,2) check (final_amount is null or final_amount >= 0),
+  closing_balance numeric(14,2) not null default 0,
+  is_placeholder boolean not null default false,
+  status text not null default 'active' check (status in ('active','archived')),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (end_date >= start_date),
+  unique (user_id, management_type, label)
+);
+
+create table condominium_installments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references profiles(id) on delete cascade,
+  period_id uuid not null references condominium_periods(id) on delete cascade,
+  source_period_id uuid references condominium_periods(id) on delete set null,
+  kind text not null default 'regular' check (kind in ('regular','extraordinary','settlement')),
+  description text not null,
+  amount numeric(14,2) not null check (amount >= 0),
+  original_amount numeric(14,2) not null check (original_amount >= 0),
+  credit_applied numeric(14,2) not null default 0 check (credit_applied >= 0),
+  due_date date not null,
+  account_id uuid references accounts(id) on delete set null,
+  category_id uuid references categories(id) on delete set null,
+  planned_recurrence_id uuid unique references recurrences(id) on delete set null,
+  paid_at date,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table debts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references profiles(id) on delete cascade,
@@ -221,6 +260,8 @@ create index transactions_refund_idx on transactions(refund_of_id)
 create index recurrences_next_date_idx on recurrences(user_id, next_date)
   where active;
 create index budgets_user_month_idx on budgets(user_id, month);
+create index condominium_periods_user_type_idx on condominium_periods(user_id, management_type, start_date desc);
+create index condominium_installments_period_idx on condominium_installments(period_id, due_date);
 create index financings_user_status_idx on financings(user_id, status);
 create index financings_recurrence_idx on financings(recurrence_id);
 
@@ -245,6 +286,10 @@ for each row execute function set_updated_at();
 create trigger transactions_updated_at before update on transactions
 for each row execute function set_updated_at();
 create trigger financings_updated_at before update on financings
+for each row execute function set_updated_at();
+create trigger condominium_periods_updated_at before update on condominium_periods
+for each row execute function set_updated_at();
+create trigger condominium_installments_updated_at before update on condominium_installments
 for each row execute function set_updated_at();
 create trigger debts_updated_at before update on debts
 for each row execute function set_updated_at();
@@ -272,6 +317,8 @@ alter table categories enable row level security;
 alter table recurrences enable row level security;
 alter table transactions enable row level security;
 alter table budgets enable row level security;
+alter table condominium_periods enable row level security;
+alter table condominium_installments enable row level security;
 alter table debts enable row level security;
 alter table financings enable row level security;
 
@@ -280,7 +327,7 @@ alter table financings enable row level security;
 -- di interrogare e modificare le tabelle dell'app.
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on table
-  profiles, accounts, cards, categories, recurrences, transactions, budgets, debts, financings
+  profiles, accounts, cards, categories, recurrences, transactions, budgets, condominium_periods, condominium_installments, debts, financings
 to authenticated;
 grant select, insert, update, delete on table financings to service_role;
 grant usage, select on all sequences in schema public to authenticated;
@@ -310,6 +357,14 @@ using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 
 create policy budgets_owner on budgets for all to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy condominium_periods_owner on condominium_periods for all to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
+
+create policy condominium_installments_owner on condominium_installments for all to authenticated
 using ((select auth.uid()) = user_id)
 with check ((select auth.uid()) = user_id);
 

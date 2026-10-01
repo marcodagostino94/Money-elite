@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { CondominiumSection } from "./condominium";
 import {
   formatItalianDate,
   loadMoneyData,
@@ -26,6 +27,7 @@ type Section =
   | "Finanziamenti"
   | "Conti"
   | "Fondo pensione"
+  | "Condominio"
   | "Carte di credito"
   | "Budget"
   | "Debiti"
@@ -277,6 +279,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Carte di credito", icon: "card" },
   { label: "Fondo pensione", icon: "pension" },
   { label: "Budget", icon: "budget" },
+  { label: "Condominio", icon: "building" },
   { label: "Report", icon: "report" },
   { label: "Informazioni", icon: "info" },
   { label: "Impostazioni", icon: "settings" },
@@ -1527,8 +1530,21 @@ function Sidebar({
             {item.label}
           </button>
         ))}
+        <p className="nav-title">CONDOMINIO</p>
+        {nav.slice(10, 11).map((item) => (
+          <button
+            key={item.label}
+            className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
+            onClick={() => setActive(item.label)}
+          >
+            <span>
+              <AppIcon name={item.icon} />
+            </span>
+            {item.label}
+          </button>
+        ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(10).map((item) => (
+        {nav.slice(11).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -2587,6 +2603,11 @@ const sectionData: Record<
     intro: "TFR e contributi maturati, versati e ancora da incassare.",
     action: "Nuova mensilità",
   },
+  Condominio: {
+    title: "Condominio",
+    intro: "Preventivi, consuntivi e rate delle gestioni condominiali.",
+    action: "Nuovo preventivo",
+  },
   "Carte di credito": {
     title: "Carte di credito",
     intro: "Controlla plafond, addebiti e date di chiusura.",
@@ -2812,6 +2833,15 @@ function GenericSection({
       />
     );
   if (section === "Fondo pensione") return <PensionFundSection />;
+  if (section === "Condominio")
+    return (
+      <CondominiumSection
+        accounts={accounts}
+        categories={categories}
+        transactions={transactions}
+        refreshMoney={refresh}
+      />
+    );
   if (section === "Carte di credito")
     return (
       <CreditCardsSection
@@ -8383,7 +8413,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 11.0.0</h2>
+          <h2>Money Elite versione 12.0.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8426,9 +8456,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Fondo pensione con TFR separato lasciato in azienda e
-              trasferimenti tracciati; budget persistenti mensili o a durata
-              personalizzata.
+              Nuova gestione Condominio con preventivi, consuntivi, rate e
+              collegamento facoltativo alle transazioni pianificate.
             </p>
           </div>
         </article>

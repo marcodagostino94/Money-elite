@@ -3039,17 +3039,419 @@ header h1 {
   }
   .pension-toolbar {
     display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .pension-toolbar button {
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 8px;
+    line-height: 1.15;
   }
   .pension-row {
-    grid-template-columns: 38px 1fr;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 8px;
   }
-  .pension-amount,
-  .pension-actions {
+  .pension-amount {
     grid-column: 2;
     text-align: left;
   }
+  .pension-actions {
+    grid-column: 3;
+    align-self: center;
+  }
+  .pension-actions button {
+    padding: 6px;
+    font-size: 8px;
+  }
   .pension-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Condominio */
+.condominium-areas {
+  display: grid;
+  gap: 18px;
+}
+.condominium-area {
+  padding: 20px;
+  overflow: hidden;
+}
+.condominium-area-heading {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.condominium-area-heading h2,
+.condominium-area-heading small,
+.condominium-area-totals small,
+.condominium-area-totals strong,
+.condominium-area-totals span {
+  display: block;
+}
+.condominium-area-heading h2 {
+  margin: 2px 0 0;
+}
+.condominium-area-heading small,
+.condominium-area-totals small {
+  color: #777;
+  font-size: 8px;
+  letter-spacing: 0.65px;
+}
+.condominium-area-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: #7254b5;
+  background: #f0ebfb;
+}
+.condominium-area.heating .condominium-area-icon {
+  color: #c66b36;
+  background: #fff0e7;
+}
+.condominium-area-totals,
+.condominium-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.condominium-area-totals > div,
+.condominium-summary > div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #faf9f7;
+}
+.condominium-area-totals strong,
+.condominium-summary strong {
+  margin-top: 5px;
+  font-size: 17px;
+}
+.condominium-area-totals span,
+.condominium-summary span {
+  margin-top: 3px;
+  color: #777;
+  font-size: 9px;
+}
+.condominium-area-totals .positive,
+.condominium-summary .positive-card,
+.condominium-final-card .positive {
+  color: #25864e;
+  background: #f0faf4;
+  border-color: #c6e7d1;
+}
+.condominium-area-totals .negative,
+.condominium-summary .negative-card,
+.condominium-final-card .negative {
+  color: #b34843;
+  background: #fff3f2;
+  border-color: #efcac7;
+}
+.condominium-period-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  overflow-x: auto;
+  border-top: 1px solid var(--line);
+}
+.condominium-period-tabs > button {
+  display: grid;
+  min-width: 125px;
+  padding: 11px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.condominium-period-tabs span,
+.condominium-period-tabs em {
+  color: #888;
+  font-size: 8px;
+  font-style: normal;
+}
+.condominium-period-tabs b {
+  margin: 3px 0;
+}
+.condominium-period-tabs em.open {
+  color: #b34843;
+}
+.condominium-period-tabs em.closed {
+  color: #25864e;
+}
+.condominium-detail-header {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.condominium-summary {
+  margin: 0 0 14px;
+}
+.condominium-summary button {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 7px;
+  padding: 0;
+  color: #7651c6;
+  border: 0;
+  background: none;
+  font-size: 9px;
+}
+.condominium-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.condominium-toolbar button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.condominium-installments {
+  padding: 5px 18px;
+}
+.condominium-list-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.condominium-list-title h3,
+.condominium-list-title small {
+  display: block;
+  margin: 0;
+}
+.condominium-list-title small {
+  color: #777;
+  font-size: 8px;
+}
+.condominium-list-title > span {
+  color: #777;
+  font-size: 10px;
+}
+.condominium-installment {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  gap: 11px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.condominium-installment-state {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+.condominium-installment.paid .condominium-installment-state {
+  color: #25864e;
+  background: #e4f6eb;
+}
+.condominium-installment.pending .condominium-installment-state {
+  background: #fde7e5;
+}
+.condominium-installment.pending .condominium-installment-state span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #b34843;
+}
+.condominium-installment h3,
+.condominium-installment p,
+.condominium-installment em,
+.condominium-installment small {
+  display: block;
+  margin: 0;
+}
+.condominium-installment small,
+.condominium-installment p,
+.condominium-installment em {
+  color: #777;
+  font-size: 9px;
+}
+.condominium-installment em {
+  margin-top: 3px;
+}
+.condominium-installment.paid > strong {
+  color: #25864e;
+}
+.condominium-installment.pending > strong {
+  color: #b34843;
+}
+.condominium-row-actions {
+  display: flex;
+  gap: 5px;
+}
+.condominium-row-actions button {
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  font-size: 8px;
+}
+.condominium-final-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+}
+.condominium-final-card > div {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.condominium-final-card h3,
+.condominium-final-card strong,
+.condominium-final-card span,
+.condominium-final-card small {
+  display: block;
+  margin: 0;
+}
+.condominium-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.opening-balance-fieldset {
+  margin: 13px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.opening-balance-fieldset legend {
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.opening-balance-fieldset .type-switch {
+  grid-template-columns: repeat(3, 1fr);
+  margin-bottom: 10px;
+}
+.carry-preview {
+  margin: 12px 0;
+  padding: 11px;
+  border-radius: 9px;
+  font-size: 10px;
+}
+.carry-preview.debt {
+  color: #b34843;
+  background: #fff3f2;
+}
+.carry-preview.credit {
+  color: #25864e;
+  background: #f0faf4;
+}
+.calculate-installments {
+  width: 100%;
+  margin: 8px 0 12px;
+}
+.condominium-schedule-editor {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.schedule-editor-heading {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  background: #f7f5f1;
+  font-size: 9px;
+}
+.condominium-schedule-row {
+  display: grid;
+  grid-template-columns: 18px minmax(90px, 1fr) 125px 90px;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+.condominium-schedule-row > input {
+  min-width: 0;
+}
+.condominium-schedule-row > input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+}
+.condominium-schedule-row small {
+  grid-column: 2 / -1;
+  color: #25864e;
+  font-size: 8px;
+}
+.condominium-working {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1000;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: #fff;
+  background: #2c2540;
+}
+@media (max-width: 760px) {
+  .condominium-area {
+    padding: 14px;
+  }
+  .condominium-area-heading {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .condominium-area-heading > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .condominium-area-totals,
+  .condominium-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .condominium-detail-header .danger-outline {
+    padding: 7px;
+    font-size: 0;
+  }
+  .condominium-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .condominium-toolbar button {
+    justify-content: center;
+    min-width: 0;
+    padding: 8px 5px;
+    font-size: 8px;
+  }
+  .condominium-toolbar .settlement {
+    grid-column: 1 / -1;
+  }
+  .condominium-installment {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+  }
+  .condominium-row-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
+  .condominium-final-card,
+  .condominium-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .condominium-schedule-editor {
+    max-height: none;
+    overflow: visible;
+  }
+  .condominium-schedule-row {
+    grid-template-columns: 18px minmax(0, 1fr) 88px;
+  }
+  .condominium-schedule-row > input[type="date"] {
+    grid-column: 2 / -1;
+  }
+  .condominium-schedule-row small {
+    grid-column: 2 / -1;
   }
 }
 @media (max-width: 620px) {
