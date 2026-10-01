@@ -905,9 +905,65 @@ const iconMap: Record<string, L.LucideIcon> = {
   clock: L.Clock3,
   stethoscope: L.Stethoscope,
   list: L.List,
+  apple: L.Apple,
+  mail: L.Mail,
+  tv: L.Tv,
+  glasses: L.Glasses,
+  garden: L.Flower2,
+  hotel: L.BedDouble,
+  personal: L.UserRound,
+  restaurant: L.UtensilsCrossed,
+  shopping: L.ShoppingBag,
+  receipt: L.Receipt,
+  euro: L.Euro,
+  calculator: L.Calculator,
+  phone: L.Phone,
+  wifi: L.Wifi,
 };
 
 function AppIcon({ name, size = 18 }: { name: string; size?: number }) {
+  if (name === "brand-spotify")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="10" fill="currentColor" />
+        <path
+          d="M6.8 9.2c3.7-1.1 7.8-.8 11.1.9M7.6 12.4c3.1-.8 6.6-.5 9.4.8M8.3 15.4c2.6-.6 5.3-.3 7.7.7"
+          stroke="white"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  if (name === "brand-chatgpt")
+    return (
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 3.1a4.1 4.1 0 0 1 7 3v2.2a4.1 4.1 0 0 1 1.4 7.8l-1.9 1.1a4.1 4.1 0 0 1-6.8 3.9l-1.9-1.1a4.1 4.1 0 0 1-7-3v-2.2a4.1 4.1 0 0 1-1.4-7.8l1.9-1.1A4.1 4.1 0 0 1 10.1 2L12 3.1Z"
+          stroke="currentColor"
+          strokeWidth="1.65"
+          strokeLinejoin="round"
+        />
+        <path
+          d="m8.1 7.2 3.9-2.3 3.9 2.3v4.6L12 14.1l-3.9-2.3V7.2Zm0 4.6v4.5l3.9 2.3 3.9-2.3v-4.5"
+          stroke="currentColor"
+          strokeWidth="1.35"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
   if (name === "bank-logo-revolut" || name === "bank-logo-mediolanum")
     return (
       <img
@@ -942,14 +998,18 @@ const categoryIcon = (name: string) => {
     Alimenti: "groceries",
     "Altri lavori": "work",
     Amazon: "package",
-    "App Store": "technology",
+    Apple: "apple",
+    "App Store": "apple",
     Arredamento: "furniture",
     Automobile: "car",
     Bar: "coffee",
+    "Busta lettera mail": "mail",
     Box: "garage",
     "Buoni pasto": "voucher",
     Carburante: "fuel",
     Casa: "home",
+    Caffè: "coffee",
+    ChatGPT: "brand-chatgpt",
     Cinema: "cinema",
     Condominio: "building",
     Cosmesi: "perfume",
@@ -961,9 +1021,9 @@ const categoryIcon = (name: string) => {
     Farmacia: "medical",
     Finanziamenti: "finance",
     Gas: "flame",
-    Giardino: "home",
+    Giardino: "garden",
     Guadagni: "income",
-    Hotel: "building",
+    Hotel: "hotel",
     iCloud: "cloud",
     Lavori: "hammer",
     "Lenti a contatto": "eye",
@@ -971,12 +1031,13 @@ const categoryIcon = (name: string) => {
     "Luce e Gas": "energy",
     Mare: "sea",
     Medici: "stethoscope",
+    Occhiali: "glasses",
     Multe: "justice",
     Noleggio: "car",
     Parcheggio: "parking",
     "Pranzi/Cene": "food",
     "Pranzi/Cene Viaggi": "food",
-    "Prodotti Casa": "home",
+    "Prodotti Casa": "cleaning",
     "Proventi Finanziari": "finance",
     Pulizie: "cleaning",
     Reddito: "income",
@@ -988,9 +1049,9 @@ const categoryIcon = (name: string) => {
     Salute: "health",
     Scommesse: "betting",
     Scooter: "bike",
-    "Sky e Netflix": "streaming",
+    "Sky e Netflix": "tv",
     "Spese Personali": "clothes",
-    Spotify: "music",
+    Spotify: "brand-spotify",
     Sport: "sport",
     Stipendio: "finance",
     Straordinari: "clock",
@@ -1004,6 +1065,8 @@ const categoryIcon = (name: string) => {
     "Trasporti Viaggi": "travel",
     Viaggi: "travel",
     Vodafone: "technology",
+    TV: "tv",
+    Tv: "tv",
   };
   return icons[name] || "circle";
 };
@@ -7987,7 +8050,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.7.0</h2>
+          <h2>Money Elite versione 10.8.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8030,8 +8093,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Colori e simboli configurati nelle Impostazioni sono ora usati
-              uniformemente in transazioni, pianificate e report.
+              Ampliato il catalogo delle icone master con simboli specifici per
+              tutte le principali categorie e i servizi più usati.
             </p>
           </div>
         </article>
@@ -8198,24 +8261,134 @@ function CategoryManagement({
   const [draftParentId, setDraftParentId] = useState("");
   const iconChoices = [
     "home",
+    "building",
+    "furniture",
+    "garage",
+    "garden",
+    "hammer",
+    "light",
+    "flame",
+    "energy",
+    "cleaning",
+    "trash",
     "groceries",
+    "shopping",
+    "package",
+    "coffee",
+    "drink",
+    "restaurant",
     "health",
+    "medical",
     "stethoscope",
+    "eye",
+    "glasses",
     "income",
     "finance",
+    "euro",
+    "receipt",
+    "document",
+    "tax",
     "gift",
     "travel",
+    "hotel",
+    "sea",
+    "beach",
     "car",
+    "fuel",
+    "parking",
+    "bike",
+    "bus",
     "telepass",
     "subscriptions",
+    "streaming",
+    "tv",
+    "brand-spotify",
+    "brand-chatgpt",
+    "apple",
+    "mail",
+    "cloud",
     "technology",
+    "phone",
+    "wifi",
     "food",
     "sport",
     "work",
     "voucher",
     "music",
     "fun",
+    "cinema",
+    "betting",
+    "cigarette",
+    "clothes",
+    "personal",
+    "clock",
+    "calculator",
   ];
+  const iconLabels: Record<string, string> = {
+    home: "Casa",
+    building: "Condominio o edificio",
+    furniture: "Arredamento",
+    garage: "Box o garage",
+    garden: "Giardino",
+    hammer: "Lavori",
+    light: "Luce",
+    flame: "Gas o riscaldamento",
+    energy: "Luce e gas",
+    cleaning: "Spray o pulizie",
+    trash: "Rifiuti",
+    groceries: "Supermercato",
+    shopping: "Acquisti",
+    package: "Pacco o Amazon",
+    coffee: "Caffè o bar",
+    drink: "Drink",
+    restaurant: "Pranzi e cene",
+    health: "Salute",
+    medical: "Farmaci",
+    stethoscope: "Medici",
+    eye: "Vista o lenti",
+    glasses: "Occhiali",
+    income: "Entrata o reddito",
+    finance: "Finanziamenti",
+    euro: "Euro",
+    receipt: "Ricevuta",
+    document: "Documento",
+    tax: "Tasse o multe",
+    gift: "Regalo",
+    travel: "Viaggi",
+    hotel: "Hotel",
+    sea: "Onda mare",
+    beach: "Spiaggia",
+    car: "Automobile",
+    fuel: "Carburante",
+    parking: "Parcheggio",
+    bike: "Scooter o bicicletta",
+    bus: "Trasporti pubblici",
+    telepass: "Telepass",
+    subscriptions: "Abbonamenti",
+    streaming: "Streaming",
+    tv: "TV",
+    "brand-spotify": "Spotify",
+    "brand-chatgpt": "ChatGPT",
+    apple: "Apple",
+    mail: "Busta lettera o mail",
+    cloud: "Cloud",
+    technology: "Tecnologia",
+    phone: "Telefono",
+    wifi: "Internet o Wi-Fi",
+    food: "Cibo",
+    sport: "Sport",
+    work: "Lavoro",
+    voucher: "Buoni pasto",
+    music: "Musica",
+    fun: "Divertimento",
+    cinema: "Cinema",
+    betting: "Scommesse",
+    cigarette: "Tabacchi",
+    clothes: "Abbigliamento",
+    personal: "Cura personale",
+    clock: "Straordinari o tempo",
+    calculator: "Calcoli o contabilità",
+  };
   const visible = categories
     .filter(
       (item) =>
@@ -8544,6 +8717,8 @@ function CategoryManagement({
                     <button
                       className={draftIcon === icon ? "selected" : ""}
                       key={icon}
+                      title={iconLabels[icon] || icon}
+                      aria-label={iconLabels[icon] || icon}
                       onClick={() => setDraftIcon(icon)}
                       style={
                         draftIcon === icon

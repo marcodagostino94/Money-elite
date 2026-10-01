@@ -1,6 +1,6 @@
 {
   "name": "money-elite",
-  "version": "10.7.0",
+  "version": "10.8.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
