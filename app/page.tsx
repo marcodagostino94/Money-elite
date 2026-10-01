@@ -274,8 +274,8 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Abbonamenti", icon: "subscriptions" },
   { label: "Finanziamenti", icon: "financing" },
   { label: "Conti", icon: "accounts" },
-  { label: "Fondo pensione", icon: "pension" },
   { label: "Carte di credito", icon: "card" },
+  { label: "Fondo pensione", icon: "pension" },
   { label: "Budget", icon: "budget" },
   { label: "Report", icon: "report" },
   { label: "Informazioni", icon: "info" },
@@ -662,12 +662,17 @@ const netExpenses = (transactions: Transaction[]) => {
 const netBudgetSpend = (
   transactions: Transaction[],
   categoryIds: Set<string>,
-  monthKey: string,
+  startDate: string,
+  endDate: string,
 ) => {
   const periodRows = transactions.filter(
     (transaction) =>
       isEffectiveTransaction(transaction) &&
-      transaction.dateISO?.startsWith(monthKey),
+      Boolean(
+        transaction.dateISO &&
+        transaction.dateISO >= startDate &&
+        transaction.dateISO <= endDate,
+      ),
   );
   const expenses = periodRows.filter(
     (transaction) =>
@@ -695,6 +700,27 @@ const netBudgetSpend = (
         (sum, transaction) => sum + Math.abs(transaction.amount),
         0,
       ),
+  );
+};
+const monthBounds = (dateISO: string) => {
+  const [year, month] = dateISO.slice(0, 7).split("-").map(Number);
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const end = toIsoDate(new Date(year, month, 0, 12));
+  return { start, end };
+};
+const budgetBounds = (budget: MoneyBudget, referenceISO: string) =>
+  budget.periodType === "days" && budget.expiresAt
+    ? { start: budget.startsAt, end: budget.expiresAt }
+    : monthBounds(referenceISO);
+const budgetIsExpired = (budget: MoneyBudget, referenceISO: string) =>
+  budget.periodType === "days" &&
+  Boolean(budget.expiresAt && referenceISO > budget.expiresAt);
+const budgetIsApplicable = (budget: MoneyBudget, referenceISO: string) => {
+  if (!budget.active || budgetIsExpired(budget, referenceISO)) return false;
+  if (budget.periodType === "monthly") return true;
+  return (
+    referenceISO >= budget.startsAt &&
+    Boolean(budget.expiresAt && referenceISO <= budget.expiresAt)
   );
 };
 const cardCycleBounds = (monthKey: string, cycleStartDay: number) => {
@@ -1860,7 +1886,7 @@ function Dashboard({
       0,
     );
   const dashboardBudgets = budgets
-    .filter((item) => item.month.startsWith(currentMonth))
+    .filter((item) => budgetIsApplicable(item, today))
     .map((item) => {
       const category = categories.find((c) => c.id === item.categoryId);
       const categoryIds = new Set([
@@ -1869,10 +1895,12 @@ function Dashboard({
           .filter((child) => child.parentId === item.categoryId)
           .map((child) => child.id),
       ]);
+      const bounds = budgetBounds(item, today);
       const spent = netBudgetSpend(
         effectiveTransactions,
         categoryIds,
-        currentMonth,
+        bounds.start,
+        bounds.end,
       );
       return {
         name: category?.name || "Categoria",
@@ -6767,9 +6795,8 @@ function BudgetSection({
 }) {
   const [editor, setEditor] = useState<MoneyBudget | "new" | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const month = toIsoDate(new Date()).slice(0, 7);
-  const visible = budgets.filter((item) => item.month.startsWith(month));
-  const details = visible.map((item) => {
+  const today = toIsoDate(new Date());
+  const details = budgets.map((item) => {
     const category = categories.find((c) => c.id === item.categoryId);
     const categoryIds = new Set([
       item.categoryId,
@@ -6777,11 +6804,25 @@ function BudgetSection({
         .filter((child) => child.parentId === item.categoryId)
         .map((child) => child.id),
     ]);
-    const spent = netBudgetSpend(transactions, categoryIds, month);
-    return { item, category, spent };
+    const bounds = budgetBounds(item, today);
+    const spent = netBudgetSpend(
+      transactions,
+      categoryIds,
+      bounds.start,
+      bounds.end,
+    );
+    return {
+      item,
+      category,
+      spent,
+      bounds,
+      expired: budgetIsExpired(item, today),
+      applicable: budgetIsApplicable(item, today),
+    };
   });
-  const total = details.reduce((sum, item) => sum + item.item.amount, 0);
-  const spent = details.reduce((sum, item) => sum + item.spent, 0);
+  const activeDetails = details.filter((item) => item.applicable);
+  const total = activeDetails.reduce((sum, item) => sum + item.item.amount, 0);
+  const spent = activeDetails.reduce((sum, item) => sum + item.spent, 0);
   const remove = async (id: string) => {
     if (!window.confirm("Eliminare questo budget?")) return;
     const { error } = await getSupabaseBrowserClient()
@@ -6792,6 +6833,33 @@ function BudgetSection({
       alert(error.message);
       return;
     }
+    await refresh();
+  };
+  const toggle = async (item: MoneyBudget) => {
+    const expired = budgetIsExpired(item, today);
+    const activating = !item.active || expired;
+    const payload: Record<string, unknown> = { active: activating };
+    if (activating && expired && item.periodType === "days") {
+      const days = Math.max(1, item.durationDays || 1);
+      const end = new Date(`${today}T12:00:00`);
+      end.setDate(end.getDate() + days - 1);
+      payload.starts_at = today;
+      payload.expires_at = toIsoDate(end);
+    }
+    const supabase = getSupabaseBrowserClient();
+    if (activating) {
+      const { error: pauseError } = await supabase
+        .from("budgets")
+        .update({ active: false })
+        .eq("category_id", item.categoryId)
+        .neq("id", item.id);
+      if (pauseError) return alert(pauseError.message);
+    }
+    const { error } = await supabase
+      .from("budgets")
+      .update(payload)
+      .eq("id", item.id);
+    if (error) return alert(error.message);
     await refresh();
   };
   const selected = details.find((detail) => detail.item.id === detailId);
@@ -6805,7 +6873,11 @@ function BudgetSection({
     const periodRows = transactions.filter(
       (transaction) =>
         isEffectiveTransaction(transaction) &&
-        transaction.dateISO?.startsWith(month),
+        Boolean(
+          transaction.dateISO &&
+          transaction.dateISO >= selected.bounds.start &&
+          transaction.dateISO <= selected.bounds.end,
+        ),
     );
     const expenseRows = periodRows.filter(
       (transaction) =>
@@ -6837,7 +6909,10 @@ function BudgetSection({
             <AppIcon name="back" />
           </button>
           <div>
-            <small>BUDGET · {monthLabel(month).toUpperCase()}</small>
+            <small>
+              BUDGET · {formatItalianDate(selected.bounds.start)} –{" "}
+              {formatItalianDate(selected.bounds.end)}
+            </small>
             <h2>{selected.category?.name || "Categoria"}</h2>
             <p>Uscite e rimborsi che compongono la spesa netta</p>
           </div>
@@ -6875,7 +6950,7 @@ function BudgetSection({
             ))
           ) : (
             <div className="empty">
-              Nessuna transazione per questo budget nel mese selezionato.
+              Nessuna transazione nell’intervallo di questo budget.
             </div>
           )}
         </article>
@@ -6883,7 +6958,6 @@ function BudgetSection({
           <BudgetModal
             budget={editor}
             categories={categories}
-            month={`${month}-01`}
             close={() => setEditor(null)}
             refresh={refresh}
           />
@@ -6894,17 +6968,10 @@ function BudgetSection({
   return (
     <section className="section-page">
       <div className="budget-month-row">
-        <label>
-          Mese
-          <select value={month} disabled>
-            <option>
-              {new Intl.DateTimeFormat("it-IT", {
-                month: "long",
-                year: "numeric",
-              }).format(new Date())}
-            </option>
-          </select>
-        </label>
+        <div>
+          <small>BUDGET</small>
+          <h2>Regole di spesa</h2>
+        </div>
         <button className="outline" onClick={() => setEditor("new")}>
           ＋ Crea budget
         </button>
@@ -6925,67 +6992,96 @@ function BudgetSection({
       </div>
       <div className="item-grid">
         {details.length ? (
-          details.map(({ item, category, spent }) => (
-            <article
-              className="item-card budget-card budget-card-clickable"
-              key={item.id}
-              onClick={() => setDetailId(item.id)}
-            >
-              <div className="item-body">
-                <small>BUDGET MENSILE</small>
-                <h3>{category?.name || "Categoria"}</h3>
-                <div className="progress">
-                  <i
-                    style={{
-                      width: `${Math.min(100, (spent / item.amount) * 100)}%`,
-                      background: category?.color || "#7c65b5",
-                    }}
-                  />
+          details.map(
+            ({ item, category, spent, bounds, expired, applicable }) => (
+              <article
+                className="item-card budget-card budget-card-clickable"
+                key={item.id}
+                onClick={() => setDetailId(item.id)}
+              >
+                <div className="item-body">
+                  <small>
+                    {item.periodType === "monthly"
+                      ? "MENSILE · SI RINNOVA"
+                      : `${item.durationDays} GIORNI · ${formatItalianDate(bounds.start)} – ${formatItalianDate(bounds.end)}`}
+                  </small>
+                  <h3>{category?.name || "Categoria"}</h3>
+                  <span
+                    className={`budget-status ${applicable ? "active" : "inactive"}`}
+                  >
+                    {expired
+                      ? "Scaduto"
+                      : item.active
+                        ? "Attivo"
+                        : "Disattivato"}
+                  </span>
+                  <div className="progress">
+                    <i
+                      style={{
+                        width: `${Math.min(100, (spent / item.amount) * 100)}%`,
+                        background: category?.color || "#7c65b5",
+                      }}
+                    />
+                  </div>
+                  <strong>
+                    {money(spent)} <span>di {money(item.amount)}</span>
+                  </strong>
                 </div>
-                <strong>
-                  {money(spent)} <span>di {money(item.amount)}</span>
-                </strong>
-              </div>
-              <div className="budget-card-actions">
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setEditor(item);
-                  }}
-                  aria-label="Modifica budget"
-                >
-                  <AppIcon name="edit" />
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void remove(item.id);
-                  }}
-                  aria-label="Elimina budget"
-                >
-                  <AppIcon name="trash" />
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setDetailId(item.id);
-                  }}
-                  aria-label="Vedi transazioni"
-                >
-                  <AppIcon name="list" />
-                </button>
-              </div>
-            </article>
-          ))
+                <div className="budget-card-actions">
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void toggle(item);
+                    }}
+                    aria-label={
+                      item.active && !expired
+                        ? "Disattiva budget"
+                        : "Attiva budget"
+                    }
+                  >
+                    <AppIcon
+                      name={item.active && !expired ? "pause" : "play"}
+                    />
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditor(item);
+                    }}
+                    aria-label="Modifica budget"
+                  >
+                    <AppIcon name="edit" />
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void remove(item.id);
+                    }}
+                    aria-label="Elimina budget"
+                  >
+                    <AppIcon name="trash" />
+                  </button>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDetailId(item.id);
+                    }}
+                    aria-label="Vedi transazioni"
+                  >
+                    <AppIcon name="list" />
+                  </button>
+                </div>
+              </article>
+            ),
+          )
         ) : (
-          <div className="empty panel">Nessun budget per questo mese.</div>
+          <div className="empty panel">Nessun budget creato.</div>
         )}
       </div>
       {editor && (
         <BudgetModal
           budget={editor === "new" ? undefined : editor}
           categories={categories}
-          month={`${month}-01`}
           close={() => setEditor(null)}
           refresh={refresh}
         />
@@ -6997,16 +7093,17 @@ function BudgetSection({
 function BudgetModal({
   budget,
   categories,
-  month,
   close,
   refresh,
 }: {
   budget?: MoneyBudget;
   categories: MoneyCategory[];
-  month: string;
   close: () => void;
   refresh: () => Promise<void>;
 }) {
+  const [periodType, setPeriodType] = useState<"monthly" | "days">(
+    budget?.periodType || "monthly",
+  );
   const leaves = categories.filter(
     (c) =>
       c.kind === "expense" &&
@@ -7019,18 +7116,34 @@ function BudgetModal({
       data: { user },
     } = await getSupabaseBrowserClient().auth.getUser();
     if (!user) return;
+    const startsAt = String(fd.get("startsAt") || toIsoDate(new Date()));
+    const durationDays = Math.max(1, Number(fd.get("durationDays") || 1));
+    const expiration = new Date(`${startsAt}T12:00:00`);
+    expiration.setDate(expiration.getDate() + durationDays - 1);
     const payload = {
       user_id: user.id,
       category_id: String(fd.get("category")),
       amount: parseItalianAmount(fd.get("amount")),
-      month,
+      month: `${startsAt.slice(0, 7)}-01`,
+      active: budget?.active ?? true,
+      period_type: periodType,
+      duration_days: periodType === "days" ? durationDays : null,
+      starts_at: startsAt,
+      expires_at: periodType === "days" ? toIsoDate(expiration) : null,
     };
+    const supabase = getSupabaseBrowserClient();
+    if (payload.active) {
+      let query = supabase
+        .from("budgets")
+        .update({ active: false })
+        .eq("category_id", payload.category_id);
+      if (budget) query = query.neq("id", budget.id);
+      const { error: pauseError } = await query;
+      if (pauseError) return alert(pauseError.message);
+    }
     const { error } = budget
-      ? await getSupabaseBrowserClient()
-          .from("budgets")
-          .update(payload)
-          .eq("id", budget.id)
-      : await getSupabaseBrowserClient().from("budgets").insert(payload);
+      ? await supabase.from("budgets").update(payload).eq("id", budget.id)
+      : await supabase.from("budgets").insert(payload);
     if (error) {
       alert(error.message);
       return;
@@ -7074,6 +7187,43 @@ function BudgetModal({
             required
           />
         </label>
+        <label>
+          Durata
+          <select
+            name="periodType"
+            value={periodType}
+            onChange={(event) =>
+              setPeriodType(event.target.value as "monthly" | "days")
+            }
+          >
+            <option value="monthly">Mensile, senza scadenza</option>
+            <option value="days">Per un numero di giorni</option>
+          </select>
+        </label>
+        {periodType === "days" && (
+          <div className="budget-duration-fields">
+            <label>
+              Data di inizio
+              <input
+                name="startsAt"
+                type="date"
+                defaultValue={budget?.startsAt || toIsoDate(new Date())}
+                required
+              />
+            </label>
+            <label>
+              Numero di giorni
+              <input
+                name="durationDays"
+                type="number"
+                min="1"
+                inputMode="numeric"
+                defaultValue={budget?.durationDays || 30}
+                required
+              />
+            </label>
+          </div>
+        )}
         <div className="modal-actions">
           <button type="button" className="cancel" onClick={close}>
             Annulla
@@ -8276,8 +8426,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Nuova sezione Fondo pensione con mensilità, contributi, versamenti
-              confermati e saldo reale completamente separati dal patrimonio.
+              Fondo pensione con incassi annullabili e selezione multipla;
+              budget persistenti mensili o a durata personalizzata.
             </p>
           </div>
         </article>
@@ -8459,6 +8609,16 @@ function PensionFundSection() {
     setConfirming(null);
     await load();
   };
+  const undoPayment = async (item: PensionFundEntry) => {
+    if (!window.confirm("Rendere nuovamente questa mensilità non incassata?"))
+      return;
+    const { error } = await getSupabaseBrowserClient()
+      .from("pension_fund_entries")
+      .update({ status: "pending", paid_at: null, paid_amount: null })
+      .eq("id", item.id);
+    if (error) alert(error.message);
+    else await load();
+  };
   const saveBalance = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fd = new FormData(event.currentTarget);
@@ -8613,6 +8773,14 @@ function PensionFundSection() {
                     onClick={() => setConfirming(item)}
                   >
                     Conferma
+                  </button>
+                )}
+                {item.status === "paid" && (
+                  <button
+                    className="undo"
+                    onClick={() => void undoPayment(item)}
+                  >
+                    Annulla incasso
                   </button>
                 )}
                 <button onClick={() => setEditing(item)}>
@@ -8888,33 +9056,51 @@ function PensionFundSection() {
               />
             </label>
             {paymentMode === "months" ? (
-              <div className="pending-month-selector">
-                {entries
-                  .filter((item) => item.status === "pending")
-                  .map((item) => (
-                    <label key={item.id}>
-                      <input
-                        type="checkbox"
-                        checked={selectedPendingIds.includes(item.id)}
-                        onChange={() =>
-                          setSelectedPendingIds((current) =>
-                            current.includes(item.id)
-                              ? current.filter((id) => id !== item.id)
-                              : [...current, item.id],
+              <>
+                <div className="pending-month-selector">
+                  {entries
+                    .filter((item) => item.status === "pending")
+                    .map((item) => (
+                      <label key={item.id}>
+                        <input
+                          type="checkbox"
+                          checked={selectedPendingIds.includes(item.id)}
+                          onChange={() =>
+                            setSelectedPendingIds((current) =>
+                              current.includes(item.id)
+                                ? current.filter((id) => id !== item.id)
+                                : [...current, item.id],
+                            )
+                          }
+                        />
+                        <span>
+                          <b>{monthLabel(item.competenceMonth)}</b>
+                          <small>TFR e contributi</small>
+                        </span>
+                        <strong>{money(expected(item))}</strong>
+                      </label>
+                    ))}
+                  {!entries.some((item) => item.status === "pending") && (
+                    <div className="empty">Nessuna mensilità da incassare.</div>
+                  )}
+                </div>
+                {selectedPendingIds.length > 0 && (
+                  <div className="pending-selection-total">
+                    <span>
+                      {selectedPendingIds.length} mensilità selezionate
+                    </span>
+                    <strong>
+                      {money(
+                        entries
+                          .filter((item) =>
+                            selectedPendingIds.includes(item.id),
                           )
-                        }
-                      />
-                      <span>
-                        <b>{monthLabel(item.competenceMonth)}</b>
-                        <small>TFR e contributi</small>
-                      </span>
-                      <strong>{money(expected(item))}</strong>
-                    </label>
-                  ))}
-                {!entries.some((item) => item.status === "pending") && (
-                  <div className="empty">Nessuna mensilità da incassare.</div>
+                          .reduce((sum, item) => sum + expected(item), 0),
+                      )}
+                    </strong>
+                  </div>
                 )}
-              </div>
+              </>
             ) : (
               <>
                 <label>
@@ -12138,12 +12324,12 @@ export default function Home() {
       return;
     }
     if (transaction.amount < 0 && !transaction.planned && category) {
-      const month = (transaction.dateISO ?? toIsoDate(new Date())).slice(0, 7);
+      const transactionDate = transaction.dateISO ?? toIsoDate(new Date());
       const budget = budgets.find(
         (item) =>
           (item.categoryId === category.id ||
             item.categoryId === category.parentId) &&
-          item.month.startsWith(month),
+          budgetIsApplicable(item, transactionDate),
       );
       if (budget) {
         const budgetCategoryIds = new Set([
@@ -12152,10 +12338,12 @@ export default function Home() {
             .filter((child) => child.parentId === budget.categoryId)
             .map((child) => child.id),
         ]);
+        const bounds = budgetBounds(budget, transactionDate);
         const alreadySpent = netBudgetSpend(
           transactions.filter((item) => item.id !== transaction.id),
           budgetCategoryIds,
-          month,
+          bounds.start,
+          bounds.end,
         );
         const projected = alreadySpent + Math.abs(transaction.amount);
         if (projected >= budget.amount) {

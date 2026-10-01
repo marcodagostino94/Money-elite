@@ -181,9 +181,18 @@ create table budgets (
   category_id uuid not null references categories(id) on delete cascade,
   amount numeric(14,2) not null check (amount > 0),
   month date not null check (month = date_trunc('month', month)::date),
+  active boolean not null default true,
+  period_type text not null default 'monthly' check (period_type in ('monthly', 'days')),
+  duration_days integer check (duration_days is null or duration_days > 0),
+  starts_at date not null default current_date,
+  expires_at date,
   alert_percent smallint not null default 80 check (alert_percent between 1 and 100),
   created_at timestamptz not null default now(),
-  unique(user_id, category_id, month)
+  check (
+    (period_type = 'monthly' and duration_days is null and expires_at is null)
+    or
+    (period_type = 'days' and duration_days is not null and expires_at is not null and expires_at >= starts_at)
+  )
 );
 
 create table debts (

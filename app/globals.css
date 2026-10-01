@@ -2923,6 +2923,46 @@ header h1 {
 .pension-actions .danger {
   color: #b34843;
 }
+.pension-actions .undo {
+  color: #b34843;
+  border-color: #e9c7c4;
+}
+.pending-selection-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #bfe3cb;
+  border-radius: 10px;
+  background: #f0faf4;
+  color: #247847;
+}
+.pending-selection-total strong {
+  font-size: 16px;
+}
+.budget-status {
+  display: inline-flex;
+  width: fit-content;
+  margin: 4px 0 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+.budget-status.active {
+  color: #237847;
+  background: #eaf7ef;
+}
+.budget-status.inactive {
+  color: #a54843;
+  background: #fff0ee;
+}
+.budget-duration-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
 .pension-form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2995,6 +3035,9 @@ header h1 {
   }
 }
 @media (max-width: 620px) {
+  .budget-duration-fields {
+    grid-template-columns: 1fr;
+  }
   .history-row {
     grid-template-columns: 48px 1fr;
     padding: 14px;

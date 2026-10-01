@@ -70,6 +70,11 @@ export type MoneyBudget = {
   categoryId: string;
   amount: number;
   month: string;
+  active: boolean;
+  periodType: "monthly" | "days";
+  durationDays: number | null;
+  startsAt: string;
+  expiresAt: string | null;
 };
 
 export type MoneyRecurrence = {
@@ -671,6 +676,11 @@ export async function loadMoneyData(supabase: SupabaseClient, userId: string) {
     categoryId: row.category_id,
     amount: Number(row.amount),
     month: row.month,
+    active: row.active !== false,
+    periodType: row.period_type === "days" ? "days" : "monthly",
+    durationDays: row.duration_days == null ? null : Number(row.duration_days),
+    startsAt: row.starts_at || row.month,
+    expiresAt: row.expires_at || null,
   }));
   const recurrences: MoneyRecurrence[] = (rawRecurrences ?? []).map((row) => ({
     id: row.id,
