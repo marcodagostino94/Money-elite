@@ -8413,7 +8413,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 12.0.0</h2>
+          <h2>Money Elite versione 12.1.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8485,12 +8485,6 @@ type PensionFundEntry = {
   notes: string;
 };
 
-type PensionFundSnapshot = {
-  id: string;
-  observedAt: string;
-  balance: number;
-  notes: string;
-};
 type PensionFundManualPayment = {
   id: string;
   paidAt: string;
@@ -8505,7 +8499,6 @@ type PensionFundCompanyTfr = {
 
 function PensionFundSection() {
   const [entries, setEntries] = useState<PensionFundEntry[]>([]);
-  const [snapshots, setSnapshots] = useState<PensionFundSnapshot[]>([]);
   const [manualPayments, setManualPayments] = useState<
     PensionFundManualPayment[]
   >([]);
@@ -8518,7 +8511,6 @@ function PensionFundSection() {
   const [busy, setBusy] = useState(true);
   const [editing, setEditing] = useState<PensionFundEntry | "new" | null>(null);
   const [confirming, setConfirming] = useState<PensionFundEntry | null>(null);
-  const [addingBalance, setAddingBalance] = useState(false);
   const [addingPayment, setAddingPayment] = useState(false);
   const [editingCompanyTfr, setEditingCompanyTfr] = useState(false);
   const [paymentMode, setPaymentMode] = useState<
@@ -8531,7 +8523,6 @@ function PensionFundSection() {
     const supabase = getSupabaseBrowserClient();
     const [
       { data: entryRows, error: entryError },
-      { data: snapshotRows, error: snapshotError },
       { data: paymentRows, error: paymentError },
       { data: companyRows, error: companyError },
       { data: transferRows, error: transferError },
@@ -8540,10 +8531,6 @@ function PensionFundSection() {
         .from("pension_fund_entries")
         .select("*")
         .order("competence_month", { ascending: false }),
-      supabase
-        .from("pension_fund_snapshots")
-        .select("*")
-        .order("observed_at", { ascending: false }),
       supabase
         .from("pension_fund_manual_payments")
         .select("*")
@@ -8554,16 +8541,9 @@ function PensionFundSection() {
         .select("*")
         .order("paid_at", { ascending: false }),
     ]);
-    if (
-      entryError ||
-      snapshotError ||
-      paymentError ||
-      companyError ||
-      transferError
-    ) {
+    if (entryError || paymentError || companyError || transferError) {
       alert(
         entryError?.message ||
-          snapshotError?.message ||
           paymentError?.message ||
           companyError?.message ||
           transferError?.message ||
@@ -8582,14 +8562,6 @@ function PensionFundSection() {
         status: row.status,
         paidAt: row.paid_at,
         paidAmount: row.paid_amount == null ? null : Number(row.paid_amount),
-        notes: row.notes || "",
-      })),
-    );
-    setSnapshots(
-      (snapshotRows || []).map((row) => ({
-        id: row.id,
-        observedAt: row.observed_at,
-        balance: Number(row.balance),
         notes: row.notes || "",
       })),
     );
@@ -8624,7 +8596,9 @@ function PensionFundSection() {
   }, []);
   const expected = (item: PensionFundEntry) =>
     item.tfrAmount + item.personalContribution + item.employerContribution;
-  const totalMatured = entries.reduce((sum, item) => sum + expected(item), 0);
+  const totalMatured =
+    entries.reduce((sum, item) => sum + expected(item), 0) +
+    companyTransfers.reduce((sum, item) => sum + item.amount, 0);
   const totalPaid =
     entries
       .filter((item) => item.status === "paid")
@@ -8634,7 +8608,6 @@ function PensionFundSection() {
   const totalPending = entries
     .filter((item) => item.status === "pending")
     .reduce((sum, item) => sum + expected(item), 0);
-  const latestSnapshot = snapshots[0];
   const monthLabel = (value: string) =>
     new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(
       new Date(`${value}-01T12:00:00`),
@@ -8694,24 +8667,6 @@ function PensionFundSection() {
       .eq("id", item.id);
     if (error) alert(error.message);
     else await load();
-  };
-  const saveBalance = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const fd = new FormData(event.currentTarget);
-    const supabase = getSupabaseBrowserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    const { error } = await supabase.from("pension_fund_snapshots").insert({
-      user_id: user.id,
-      observed_at: String(fd.get("observedAt")),
-      balance: Math.abs(parseItalianAmount(fd.get("balance"))),
-      notes: String(fd.get("notes") || "").trim() || null,
-    });
-    if (error) return alert(error.message);
-    setAddingBalance(false);
-    await load();
   };
   const saveCompanyTfr = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -8810,16 +8765,8 @@ function PensionFundSection() {
   return (
     <section className="section-page pension-page">
       <div className="pension-summary">
-        <div>
-          <small>MATURATO NEL FONDO</small>
-          <strong>{money(totalMatured)}</strong>
-        </div>
-        <div className="paid">
-          <small>REALMENTE INCASSATO</small>
-          <strong>{money(totalPaid)}</strong>
-        </div>
         <div className="company-tfr-summary">
-          <small>TFR RIMASTO IN AZIENDA</small>
+          <small>TFR MATURATO IN AZIENDA</small>
           <strong>{money(companyTfr?.currentBalance || 0)}</strong>
           <span>Non incluso nel fondo pensione</span>
           <button
@@ -8829,24 +8776,21 @@ function PensionFundSection() {
             {companyTfr ? "Modifica indicazione" : "Inserisci importo"}
           </button>
         </div>
+        <div>
+          <small>MATURATO NEL FONDO</small>
+          <strong>{money(totalMatured)}</strong>
+          <span>Compresi i trasferimenti dall’azienda</span>
+        </div>
         <div className="pending">
           <small>ANCORA DA INCASSARE</small>
           <strong>{money(totalPending)}</strong>
         </div>
         <div className="paid">
-          <small>SALDO REALE DEL FONDO</small>
-          <strong>{money(latestSnapshot?.balance || 0)}</strong>
-          <span>
-            {latestSnapshot
-              ? `Rilevato il ${formatItalianDate(latestSnapshot.observedAt)}`
-              : "Non ancora rilevato"}
-          </span>
+          <small>REALMENTE INCASSATO</small>
+          <strong>{money(totalPaid)}</strong>
         </div>
       </div>
       <div className="pension-toolbar">
-        <button className="outline" onClick={() => setAddingBalance(true)}>
-          Aggiorna saldo reale
-        </button>
         <button
           className="outline"
           onClick={() => {
@@ -8953,7 +8897,29 @@ function PensionFundSection() {
                 <AppIcon name="transfer" /> {formatItalianDate(item.paidAt)}
                 {item.notes ? ` · ${item.notes}` : ""}
               </span>
-              <strong>{money(item.amount)}</strong>
+              <div className="pension-transfer-actions">
+                <strong>{money(item.amount)}</strong>
+                <button
+                  className="danger"
+                  aria-label="Elimina trasferimento"
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        "Eliminare il trasferimento e ripristinare l’importo nel TFR in azienda?",
+                      )
+                    )
+                      return;
+                    const { error } = await getSupabaseBrowserClient().rpc(
+                      "reverse_company_tfr_transfer",
+                      { transfer_id: item.id },
+                    );
+                    if (error) alert(error.message);
+                    else await load();
+                  }}
+                >
+                  <AppIcon name="trash" size={15} />
+                </button>
+              </div>
             </div>
           ))}
         </article>
@@ -9145,60 +9111,6 @@ function PensionFundSection() {
                 Annulla
               </button>
               <button className="save-action transfer">Conferma incasso</button>
-            </div>
-          </form>
-        </div>
-      )}
-      {addingBalance && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={() => setAddingBalance(false)}
-        >
-          <form
-            className="modal"
-            onSubmit={saveBalance}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="modal-title">
-              <div>
-                <small>SALDO DEL FONDO</small>
-                <h2>Nuova rilevazione</h2>
-              </div>
-              <button type="button" onClick={() => setAddingBalance(false)}>
-                <AppIcon name="close" />
-              </button>
-            </div>
-            <label>
-              Data rilevazione
-              <input
-                name="observedAt"
-                type="date"
-                required
-                defaultValue={toIsoDate(new Date())}
-              />
-            </label>
-            <label>
-              Saldo mostrato dal fondo
-              <input
-                name="balance"
-                inputMode="decimal"
-                required
-                placeholder="0,00"
-              />
-            </label>
-            <label>
-              Note
-              <textarea name="notes" />
-            </label>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="cancel"
-                onClick={() => setAddingBalance(false)}
-              >
-                Annulla
-              </button>
-              <button className="save-action transfer">Salva saldo</button>
             </div>
           </form>
         </div>

@@ -1,4 +1,15 @@
-# Money Elite 12.0.0
+# Money Elite 12.1.0
+
+## Correzioni 12.1
+
+- Importi di preventivo e saldo iniziale inseribili correttamente anche su iPhone.
+- Modificando una rata, quelle successive vengono ricalcolate per conservare il totale del preventivo.
+- Riepilogo preventivo con rata originaria, credito applicato e importo effettivo.
+- Anteprima completa e selettiva delle pianificate prima della creazione.
+- Debito precedente trasformato in una rata collegata `Saldo consuntivo`.
+- La gestione corrente è indicata come `In corso`; le rate azzerate dal credito risultano saldate.
+- Riepilogo Fondo pensione riordinato e saldo reale rimosso.
+- I trasferimenti TFR dall’azienda concorrono ai totali e possono essere annullati.
 
 ## Condominio
 

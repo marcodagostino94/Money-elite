@@ -215,6 +215,7 @@ export function CondominiumSection({
   }, []);
 
   const isPaid = (item: Installment) =>
+    item.amount === 0 ||
     Boolean(
       item.paidAt ||
       (item.recurrenceId &&
@@ -239,13 +240,14 @@ export function CondominiumSection({
       .filter(isPaid)
       .reduce((sum, item) => sum + item.amount, 0);
   const periodBalance = (period: Period) => {
-    if (period.placeholder) return period.closingBalance;
-    if (period.status === "archived") return period.closingBalance;
-    if (period.finalAmount == null) return period.closingBalance;
     const settledElsewhere = installments.some(
       (item) => item.sourcePeriodId === period.id && isPaid(item),
     );
-    return settledElsewhere ? 0 : period.finalAmount - paidFor(period.id);
+    if (settledElsewhere) return 0;
+    if (period.placeholder) return period.closingBalance;
+    if (period.status === "archived") return period.closingBalance;
+    if (period.finalAmount == null) return period.closingBalance;
+    return period.finalAmount - paidFor(period.id);
   };
   const byType = (type: ManagementType) =>
     periods.filter((period) => period.managementType === type);
@@ -748,15 +750,25 @@ export function CondominiumSection({
           </div>
         </div>
         <div className="condominium-period-tabs">
-          {byType(type).map((period) => (
-            <button key={period.id} onClick={() => setSelectedId(period.id)}>
-              <span>{period.placeholder ? "Saldo iniziale" : "Gestione"}</span>
-              <b>{period.label}</b>
-              <em className={periodBalance(period) === 0 ? "closed" : "open"}>
-                {periodBalance(period) === 0 ? "Chiusa" : "Aperta"}
-              </em>
-            </button>
-          ))}
+          {byType(type).map((period) => {
+            const isCurrent = period.id === current?.id;
+            const balance = periodBalance(period);
+            return (
+              <button key={period.id} onClick={() => setSelectedId(period.id)}>
+                <span>
+                  {period.placeholder ? "Saldo iniziale" : "Gestione"}
+                </span>
+                <b>{period.label}</b>
+                <em
+                  className={
+                    isCurrent ? "current" : balance === 0 ? "closed" : "open"
+                  }
+                >
+                  {isCurrent ? "In corso" : balance === 0 ? "Chiusa" : "Aperta"}
+                </em>
+              </button>
+            );
+          })}
           {!byType(type).length && (
             <div className="empty">Nessuna gestione inserita.</div>
           )}
@@ -845,6 +857,42 @@ export function CondominiumSection({
               if (periodError) throw periodError;
               createdPeriodId = periodRow.id;
               const category = categoryFor(newType);
+              if (carry > 0 && carrySourceId) {
+                const sourceLabel =
+                  periods.find((period) => period.id === carrySourceId)
+                    ?.label || periodDefinition(newType, draft.year - 1).label;
+                const description = `Saldo consuntivo ${sourceLabel}`;
+                let recurrenceId: string | null = null;
+                if (draft.settlementPlanned) {
+                  recurrenceId = await createPlanned(
+                    {
+                      description,
+                      amount: carry,
+                      dueDate: draft.schedule[0].date,
+                      accountId: draft.accountId,
+                    },
+                    newType,
+                  );
+                  if (recurrenceId) createdRecurrenceIds.push(recurrenceId);
+                }
+                const { error } = await supabase
+                  .from("condominium_installments")
+                  .insert({
+                    user_id: user.id,
+                    period_id: periodRow.id,
+                    source_period_id: carrySourceId,
+                    kind: "settlement",
+                    description,
+                    amount: carry,
+                    original_amount: carry,
+                    credit_applied: 0,
+                    due_date: draft.schedule[0].date,
+                    account_id: draft.accountId,
+                    category_id: category?.id || null,
+                    planned_recurrence_id: recurrenceId,
+                  });
+                if (error) throw error;
+              }
               let availableCredit = Math.max(0, -carry);
               for (const [index, row] of draft.schedule.entries()) {
                 const originalAmount = row.amount;
@@ -960,6 +1008,7 @@ function NewPeriodModal({
     openingBalance: number;
     previousPeriodId: string | null;
     previousBalance: number;
+    settlementPlanned: boolean;
     schedule: Array<{
       description: string;
       amount: number;
@@ -977,8 +1026,8 @@ function NewPeriodModal({
         : now.getFullYear() - 1;
   const defaultCount = type === "ordinary" ? 4 : 5;
   const [year, setYear] = useState(defaultYear);
-  const [amount, setAmount] = useState(0);
-  const [count, setCount] = useState(defaultCount);
+  const [amountText, setAmountText] = useState("");
+  const [countText, setCountText] = useState(String(defaultCount));
   const [accountId, setAccountId] = useState(
     accounts.find((item) => !item.archived && !item.hidden && !item.isContainer)
       ?.id || "",
@@ -986,8 +1035,14 @@ function NewPeriodModal({
   const [openingKind, setOpeningKind] = useState<"none" | "debt" | "credit">(
     "none",
   );
-  const [openingAmount, setOpeningAmount] = useState(0);
+  const [openingAmountText, setOpeningAmountText] = useState("");
   const [schedule, setSchedule] = useState<ScheduleDraft[]>([]);
+  const [reviewing, setReviewing] = useState(false);
+  const [settlementPlanned, setSettlementPlanned] = useState(true);
+
+  const amount = Math.abs(parseAmount(amountText));
+  const openingAmount = Math.abs(parseAmount(openingAmountText));
+  const count = Math.max(1, Number(countText) || 1);
 
   const calculate = () => {
     const values = splitAmount(amount, Math.max(1, count));
@@ -1009,6 +1064,27 @@ function NewPeriodModal({
         ? -Math.abs(openingAmount)
         : 0;
   const previewCredit = Math.max(0, -effectiveCarry);
+  const updateScheduleAmount = (index: number, value: string) => {
+    setSchedule((current) => {
+      const next = current.map((item, position) =>
+        position === index ? { ...item, amount: value } : item,
+      );
+      const following = next.length - index - 1;
+      if (following <= 0) return next;
+      const used = next
+        .slice(0, index + 1)
+        .reduce((sum, item) => sum + Math.abs(parseAmount(item.amount)), 0);
+      const redistributed = splitAmount(Math.max(0, amount - used), following);
+      return next.map((item, position) =>
+        position > index
+          ? {
+              ...item,
+              amount: amountValue(redistributed[position - index - 1]),
+            }
+          : item,
+      );
+    });
+  };
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
@@ -1019,15 +1095,18 @@ function NewPeriodModal({
           event.preventDefault();
           if (!schedule.length)
             return alert("Premi Calcola per generare le rate.");
-          const selected = schedule.filter((row) => row.createPlanned).length;
-          const confirmed =
-            selected === 0 ||
-            window.confirm(
-              `Vuoi creare ${selected} transazion${selected === 1 ? "e" : "i"} pianificat${selected === 1 ? "a" : "e"}?`,
+          const scheduleTotal = schedule.reduce(
+            (sum, row) => sum + Math.abs(parseAmount(row.amount)),
+            0,
+          );
+          if (Math.abs(scheduleTotal - amount) > 0.009)
+            return alert(
+              "La somma delle rate deve coincidere con il preventivo.",
             );
-          const finalSchedule = confirmed
-            ? schedule
-            : schedule.map((row) => ({ ...row, createPlanned: false }));
+          if (!reviewing) {
+            setReviewing(true);
+            return;
+          }
           void onSave({
             year,
             budgetAmount: amount,
@@ -1035,7 +1114,8 @@ function NewPeriodModal({
             openingBalance: effectiveCarry,
             previousPeriodId: previous?.id || null,
             previousBalance,
-            schedule: finalSchedule.map((row) => ({
+            settlementPlanned,
+            schedule: schedule.map((row) => ({
               ...row,
               amount: Math.abs(parseAmount(row.amount)),
             })),
@@ -1069,10 +1149,8 @@ function NewPeriodModal({
             Preventivo per il tuo appartamento
             <input
               inputMode="decimal"
-              value={amountValue(amount)}
-              onChange={(event) =>
-                setAmount(Math.abs(parseAmount(event.target.value)))
-              }
+              value={amountText}
+              onChange={(event) => setAmountText(event.target.value)}
               placeholder="0,00"
             />
           </label>
@@ -1082,10 +1160,8 @@ function NewPeriodModal({
               type="number"
               min="1"
               max="24"
-              value={count}
-              onChange={(event) =>
-                setCount(Math.max(1, Number(event.target.value) || 1))
-              }
+              value={countText}
+              onChange={(event) => setCountText(event.target.value)}
             />
           </label>
           <label>
@@ -1131,10 +1207,8 @@ function NewPeriodModal({
                 Importo
                 <input
                   inputMode="decimal"
-                  value={amountValue(openingAmount)}
-                  onChange={(event) =>
-                    setOpeningAmount(Math.abs(parseAmount(event.target.value)))
-                  }
+                  value={openingAmountText}
+                  onChange={(event) => setOpeningAmountText(event.target.value)}
                 />
               </label>
             )}
@@ -1158,7 +1232,7 @@ function NewPeriodModal({
         >
           Calcola rate
         </button>
-        {schedule.length > 0 && (
+        {schedule.length > 0 && !reviewing && (
           <div className="condominium-schedule-editor">
             <div className="schedule-editor-heading">
               <span>Rate calcolate</span>
@@ -1219,30 +1293,102 @@ function NewPeriodModal({
                     inputMode="decimal"
                     value={row.amount}
                     onChange={(event) =>
-                      setSchedule((current) =>
-                        current.map((item, position) =>
-                          position === index
-                            ? { ...item, amount: event.target.value }
-                            : item,
-                        ),
-                      )
+                      updateScheduleAmount(index, event.target.value)
                     }
                   />
-                  {applied > 0 && <small>− {money(applied)} credito</small>}
+                  <small>
+                    Rata originaria {money(Math.abs(parseAmount(row.amount)))}
+                    {applied > 0
+                      ? ` · credito −${money(applied)} · da pagare ${money(Math.max(0, Math.abs(parseAmount(row.amount)) - applied))}`
+                      : ` · da pagare ${money(Math.abs(parseAmount(row.amount)))}`}
+                  </small>
                 </div>
               );
             })}
           </div>
         )}
+        {reviewing && (
+          <div className="planned-review">
+            <div className="schedule-editor-heading">
+              <span>Transazioni pianificate da creare</span>
+              <small>Seleziona soltanto quelle che desideri</small>
+            </div>
+            {effectiveCarry > 0 && (
+              <label className="planned-review-row settlement-review">
+                <input
+                  type="checkbox"
+                  checked={settlementPlanned}
+                  onChange={() => setSettlementPlanned((value) => !value)}
+                />
+                <span>
+                  <b>Saldo consuntivo {previous?.label || "precedente"}</b>
+                  <small>
+                    {formatItalianDate(schedule[0].date)} · Casa ›{" "}
+                    {type === "ordinary" ? "Condominio" : "Riscaldamento"}
+                  </small>
+                </span>
+                <strong>{money(effectiveCarry)}</strong>
+              </label>
+            )}
+            {schedule.map((row, index) => {
+              const creditBefore = schedule
+                .slice(0, index)
+                .reduce(
+                  (sum, item) => sum + Math.abs(parseAmount(item.amount)),
+                  0,
+                );
+              const applied = Math.min(
+                Math.max(0, previewCredit - creditBefore),
+                Math.abs(parseAmount(row.amount)),
+              );
+              const effective = Math.max(
+                0,
+                Math.abs(parseAmount(row.amount)) - applied,
+              );
+              return (
+                <label className="planned-review-row" key={index}>
+                  <input
+                    type="checkbox"
+                    checked={row.createPlanned && effective > 0}
+                    disabled={effective === 0}
+                    onChange={() =>
+                      setSchedule((current) =>
+                        current.map((item, position) =>
+                          position === index
+                            ? { ...item, createPlanned: !item.createPlanned }
+                            : item,
+                        ),
+                      )
+                    }
+                  />
+                  <span>
+                    <b>{row.description}</b>
+                    <small>
+                      {formatItalianDate(row.date)} · Casa ›{" "}
+                      {type === "ordinary" ? "Condominio" : "Riscaldamento"} ·{" "}
+                      {accounts.find((item) => item.id === accountId)?.name ||
+                        "Conto"}
+                    </small>
+                  </span>
+                  <strong>{money(effective)}</strong>
+                </label>
+              );
+            })}
+          </div>
+        )}
         <div className="modal-actions">
-          <button type="button" className="cancel" onClick={onClose}>
-            Annulla
+          <button
+            type="button"
+            className="cancel"
+            onClick={() => (reviewing ? setReviewing(false) : onClose())}
+          >
+            {reviewing ? "Indietro" : "Annulla"}
           </button>
           <button
             className="save-action transfer"
             disabled={!schedule.length || !accountId}
           >
-            Crea gestione
+            {reviewing ? "Conferma e crea" : "Rivedi pianificate"}
           </button>
         </div>
       </form>
