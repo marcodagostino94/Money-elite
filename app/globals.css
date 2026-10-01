@@ -2805,6 +2805,195 @@ header h1 {
     width: 75%;
   }
 }
+
+.pension-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.pension-summary > div {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.pension-summary small,
+.pension-summary strong,
+.pension-summary span {
+  display: block;
+}
+.pension-summary small {
+  font-size: 8px;
+  letter-spacing: 0.7px;
+  color: #777;
+}
+.pension-summary strong {
+  margin-top: 7px;
+  font-size: 20px;
+}
+.pension-summary span {
+  margin-top: 5px;
+  font-size: 9px;
+  color: #777;
+}
+.pension-summary .paid {
+  background: #f0faf4;
+  border-color: #bfe5ce;
+  color: #25864e;
+}
+.pension-summary .pending {
+  background: #fff3f2;
+  border-color: #efcac7;
+  color: #b34843;
+}
+.pension-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.pension-list {
+  padding: 4px 18px;
+}
+.pension-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pension-state {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.pension-row.paid .pension-state {
+  color: #25864e;
+  background: #e4f6eb;
+}
+.pension-row.pending .pension-state {
+  color: #b34843;
+  background: #fde7e5;
+}
+.pension-row.paid .pension-amount {
+  color: #25864e;
+}
+.pension-row.pending .pension-amount {
+  color: #b34843;
+}
+.pension-row h3 {
+  margin: 0 0 4px;
+  text-transform: capitalize;
+}
+.pension-row p,
+.pension-row small {
+  margin: 0;
+  color: #777;
+  font-size: 10px;
+}
+.pension-amount {
+  text-align: right;
+}
+.pension-amount strong,
+.pension-amount span {
+  display: block;
+}
+.pension-amount span {
+  margin-top: 3px;
+  font-size: 9px;
+}
+.pension-actions {
+  display: flex;
+  gap: 5px;
+}
+.pension-actions button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px;
+}
+.pension-actions .confirm {
+  color: #25864e;
+  border-color: #bfe5ce;
+}
+.pension-actions .danger {
+  color: #b34843;
+}
+.pension-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.pending-month-selector {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.pending-month-selector > label {
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.pending-month-selector input {
+  width: 18px !important;
+  min-height: 18px !important;
+  margin: 0 !important;
+}
+.pending-month-selector span,
+.pending-month-selector small {
+  display: block;
+}
+.pending-month-selector b {
+  text-transform: capitalize;
+}
+.pension-manual-list {
+  margin-top: 14px;
+  padding: 16px;
+}
+.pension-manual-list h3 {
+  margin-top: 0;
+}
+.pension-manual-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  color: #25864e;
+}
+.pension-manual-list span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+@media (max-width: 760px) {
+  .pension-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pension-toolbar {
+    display: grid;
+  }
+  .pension-row {
+    grid-template-columns: 38px 1fr;
+  }
+  .pension-amount,
+  .pension-actions {
+    grid-column: 2;
+    text-align: left;
+  }
+  .pension-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
 @media (max-width: 620px) {
   .history-row {
     grid-template-columns: 48px 1fr;

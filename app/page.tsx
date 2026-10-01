@@ -25,6 +25,7 @@ type Section =
   | "Abbonamenti"
   | "Finanziamenti"
   | "Conti"
+  | "Fondo pensione"
   | "Carte di credito"
   | "Budget"
   | "Debiti"
@@ -273,6 +274,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Abbonamenti", icon: "subscriptions" },
   { label: "Finanziamenti", icon: "financing" },
   { label: "Conti", icon: "accounts" },
+  { label: "Fondo pensione", icon: "pension" },
   { label: "Carte di credito", icon: "card" },
   { label: "Budget", icon: "budget" },
   { label: "Report", icon: "report" },
@@ -823,6 +825,7 @@ const iconMap: Record<string, L.LucideIcon> = {
   planned: L.CalendarClock,
   subscriptions: L.Repeat2,
   financing: L.HandCoins,
+  pension: L.ShieldCheck,
   repeat: L.RefreshCw,
   accounts: L.WalletCards,
   card: L.CreditCard,
@@ -1486,7 +1489,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">GESTIONE</p>
-        {nav.slice(6, 9).map((item) => (
+        {nav.slice(6, 10).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1499,7 +1502,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(9).map((item) => (
+        {nav.slice(10).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -2551,6 +2554,11 @@ const sectionData: Record<
     intro: "Saldi e disponibilità aggiornati in un unico posto.",
     action: "Aggiungi conto",
   },
+  "Fondo pensione": {
+    title: "Fondo pensione",
+    intro: "TFR e contributi maturati, versati e ancora da incassare.",
+    action: "Nuova mensilità",
+  },
   "Carte di credito": {
     title: "Carte di credito",
     intro: "Controlla plafond, addebiti e date di chiusura.",
@@ -2775,6 +2783,7 @@ function GenericSection({
         openTransaction={openTransaction}
       />
     );
+  if (section === "Fondo pensione") return <PensionFundSection />;
   if (section === "Carte di credito")
     return (
       <CreditCardsSection
@@ -8224,7 +8233,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 10.9.0</h2>
+          <h2>Money Elite versione 11.0.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8267,8 +8276,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Aggiunti loghi e simboli dedicati per servizi, utenze, cura
-              personale, pulizie, audio, assicurazione e noleggio auto.
+              Nuova sezione Fondo pensione con mensilità, contributi, versamenti
+              confermati e saldo reale completamente separati dal patrimonio.
             </p>
           </div>
         </article>
@@ -8280,6 +8289,672 @@ function InformationSection() {
           </div>
         </article>
       </div>
+    </section>
+  );
+}
+
+type PensionFundEntry = {
+  id: string;
+  competenceMonth: string;
+  tfrAmount: number;
+  personalContribution: number;
+  employerContribution: number;
+  status: "pending" | "paid";
+  paidAt: string | null;
+  paidAmount: number | null;
+  notes: string;
+};
+
+type PensionFundSnapshot = {
+  id: string;
+  observedAt: string;
+  balance: number;
+  notes: string;
+};
+type PensionFundManualPayment = {
+  id: string;
+  paidAt: string;
+  amount: number;
+  notes: string;
+};
+
+function PensionFundSection() {
+  const [entries, setEntries] = useState<PensionFundEntry[]>([]);
+  const [snapshots, setSnapshots] = useState<PensionFundSnapshot[]>([]);
+  const [manualPayments, setManualPayments] = useState<
+    PensionFundManualPayment[]
+  >([]);
+  const [busy, setBusy] = useState(true);
+  const [editing, setEditing] = useState<PensionFundEntry | "new" | null>(null);
+  const [confirming, setConfirming] = useState<PensionFundEntry | null>(null);
+  const [addingBalance, setAddingBalance] = useState(false);
+  const [addingPayment, setAddingPayment] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<"months" | "manual">("months");
+  const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
+  const [working, setWorking] = useState(false);
+  const load = async () => {
+    setBusy(true);
+    const supabase = getSupabaseBrowserClient();
+    const [
+      { data: entryRows, error: entryError },
+      { data: snapshotRows, error: snapshotError },
+      { data: paymentRows, error: paymentError },
+    ] = await Promise.all([
+      supabase
+        .from("pension_fund_entries")
+        .select("*")
+        .order("competence_month", { ascending: false }),
+      supabase
+        .from("pension_fund_snapshots")
+        .select("*")
+        .order("observed_at", { ascending: false }),
+      supabase
+        .from("pension_fund_manual_payments")
+        .select("*")
+        .order("paid_at", { ascending: false }),
+    ]);
+    if (entryError || snapshotError || paymentError) {
+      alert(
+        entryError?.message ||
+          snapshotError?.message ||
+          paymentError?.message ||
+          "Impossibile caricare il fondo pensione.",
+      );
+      setBusy(false);
+      return;
+    }
+    setEntries(
+      (entryRows || []).map((row) => ({
+        id: row.id,
+        competenceMonth: String(row.competence_month).slice(0, 7),
+        tfrAmount: Number(row.tfr_amount),
+        personalContribution: Number(row.personal_contribution || 0),
+        employerContribution: Number(row.employer_contribution || 0),
+        status: row.status,
+        paidAt: row.paid_at,
+        paidAmount: row.paid_amount == null ? null : Number(row.paid_amount),
+        notes: row.notes || "",
+      })),
+    );
+    setSnapshots(
+      (snapshotRows || []).map((row) => ({
+        id: row.id,
+        observedAt: row.observed_at,
+        balance: Number(row.balance),
+        notes: row.notes || "",
+      })),
+    );
+    setManualPayments(
+      (paymentRows || []).map((row) => ({
+        id: row.id,
+        paidAt: row.paid_at,
+        amount: Number(row.amount),
+        notes: row.notes || "",
+      })),
+    );
+    setBusy(false);
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const expected = (item: PensionFundEntry) =>
+    item.tfrAmount + item.personalContribution + item.employerContribution;
+  const totalMatured = entries.reduce((sum, item) => sum + expected(item), 0);
+  const totalPaid =
+    entries
+      .filter((item) => item.status === "paid")
+      .reduce((sum, item) => sum + (item.paidAmount ?? expected(item)), 0) +
+    manualPayments.reduce((sum, item) => sum + item.amount, 0);
+  const totalPending = entries
+    .filter((item) => item.status === "pending")
+    .reduce((sum, item) => sum + expected(item), 0);
+  const latestSnapshot = snapshots[0];
+  const monthLabel = (value: string) =>
+    new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(
+      new Date(`${value}-01T12:00:00`),
+    );
+  const saveEntry = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editing) return;
+    setWorking(true);
+    const fd = new FormData(event.currentTarget);
+    const supabase = getSupabaseBrowserClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const payload = {
+      user_id: user.id,
+      competence_month: `${String(fd.get("month"))}-01`,
+      tfr_amount: Math.abs(parseItalianAmount(fd.get("tfr"))),
+      personal_contribution: Math.abs(parseItalianAmount(fd.get("personal"))),
+      employer_contribution: Math.abs(parseItalianAmount(fd.get("employer"))),
+      notes: String(fd.get("notes") || "").trim() || null,
+    };
+    const result =
+      editing === "new"
+        ? await supabase.from("pension_fund_entries").insert(payload)
+        : await supabase
+            .from("pension_fund_entries")
+            .update(payload)
+            .eq("id", editing.id);
+    setWorking(false);
+    if (result.error) return alert(result.error.message);
+    setEditing(null);
+    await load();
+  };
+  const confirmPayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirming) return;
+    const fd = new FormData(event.currentTarget);
+    const { error } = await getSupabaseBrowserClient()
+      .from("pension_fund_entries")
+      .update({
+        status: "paid",
+        paid_at: String(fd.get("paidAt")),
+        paid_amount: Math.abs(parseItalianAmount(fd.get("paidAmount"))),
+      })
+      .eq("id", confirming.id);
+    if (error) return alert(error.message);
+    setConfirming(null);
+    await load();
+  };
+  const saveBalance = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const supabase = getSupabaseBrowserClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = await supabase.from("pension_fund_snapshots").insert({
+      user_id: user.id,
+      observed_at: String(fd.get("observedAt")),
+      balance: Math.abs(parseItalianAmount(fd.get("balance"))),
+      notes: String(fd.get("notes") || "").trim() || null,
+    });
+    if (error) return alert(error.message);
+    setAddingBalance(false);
+    await load();
+  };
+  const addPayment = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const paidAt = String(fd.get("paidAt"));
+    const supabase = getSupabaseBrowserClient();
+    if (paymentMode === "months") {
+      if (!selectedPendingIds.length) return;
+      const selected = entries.filter((item) =>
+        selectedPendingIds.includes(item.id),
+      );
+      const results = await Promise.all(
+        selected.map((item) =>
+          supabase
+            .from("pension_fund_entries")
+            .update({
+              status: "paid",
+              paid_at: paidAt,
+              paid_amount: expected(item),
+            })
+            .eq("id", item.id),
+        ),
+      );
+      const error = results.find((result) => result.error)?.error;
+      if (error) return alert(error.message);
+    } else {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase
+        .from("pension_fund_manual_payments")
+        .insert({
+          user_id: user.id,
+          paid_at: paidAt,
+          amount: Math.abs(parseItalianAmount(fd.get("amount"))),
+          notes: String(fd.get("notes") || "").trim() || null,
+        });
+      if (error) return alert(error.message);
+    }
+    setAddingPayment(false);
+    setSelectedPendingIds([]);
+    await load();
+  };
+  const removeEntry = async (item: PensionFundEntry) => {
+    if (
+      !window.confirm(
+        `Eliminare la mensilità di ${monthLabel(item.competenceMonth)}?`,
+      )
+    )
+      return;
+    const { error } = await getSupabaseBrowserClient()
+      .from("pension_fund_entries")
+      .delete()
+      .eq("id", item.id);
+    if (error) alert(error.message);
+    else await load();
+  };
+  return (
+    <section className="section-page pension-page">
+      <div className="pension-summary">
+        <div>
+          <small>TOTALE MATURATO</small>
+          <strong>{money(totalMatured)}</strong>
+        </div>
+        <div className="paid">
+          <small>REALMENTE INCASSATO</small>
+          <strong>{money(totalPaid)}</strong>
+        </div>
+        <div className="pending">
+          <small>ANCORA DA INCASSARE</small>
+          <strong>{money(totalPending)}</strong>
+        </div>
+        <div className="paid">
+          <small>SALDO REALE DEL FONDO</small>
+          <strong>{money(latestSnapshot?.balance || 0)}</strong>
+          <span>
+            {latestSnapshot
+              ? `Rilevato il ${formatItalianDate(latestSnapshot.observedAt)}`
+              : "Non ancora rilevato"}
+          </span>
+        </div>
+      </div>
+      <div className="pension-toolbar">
+        <button className="outline" onClick={() => setAddingBalance(true)}>
+          Aggiorna saldo reale
+        </button>
+        <button className="outline" onClick={() => setAddingPayment(true)}>
+          ＋ Aggiungi versamento
+        </button>
+        <button className="primary" onClick={() => setEditing("new")}>
+          ＋ Nuova mensilità
+        </button>
+      </div>
+      <article className="panel pension-list">
+        {busy ? (
+          <div className="empty">Caricamento…</div>
+        ) : (
+          entries.map((item) => (
+            <div className={`pension-row ${item.status}`} key={item.id}>
+              <div className="pension-state">
+                <AppIcon name={item.status === "paid" ? "check" : "clock"} />
+              </div>
+              <div>
+                <h3>{monthLabel(item.competenceMonth)}</h3>
+                <p>
+                  TFR {money(item.tfrAmount)}
+                  {item.personalContribution
+                    ? ` · Personale ${money(item.personalContribution)}`
+                    : ""}
+                  {item.employerContribution
+                    ? ` · Datore ${money(item.employerContribution)}`
+                    : ""}
+                </p>
+                {item.notes && <small>{item.notes}</small>}
+              </div>
+              <div className="pension-amount">
+                <strong>
+                  {money(
+                    item.status === "paid"
+                      ? (item.paidAmount ?? expected(item))
+                      : expected(item),
+                  )}
+                </strong>
+                <span>
+                  {item.status === "paid"
+                    ? `Incassato${item.paidAt ? ` il ${formatItalianDate(item.paidAt)}` : ""}`
+                    : "Da incassare"}
+                </span>
+              </div>
+              <div className="pension-actions">
+                {item.status === "pending" && (
+                  <button
+                    className="confirm"
+                    onClick={() => setConfirming(item)}
+                  >
+                    Conferma
+                  </button>
+                )}
+                <button onClick={() => setEditing(item)}>
+                  <AppIcon name="edit" />
+                </button>
+                <button
+                  className="danger"
+                  onClick={() => void removeEntry(item)}
+                >
+                  <AppIcon name="trash" />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+        {!busy && !entries.length && (
+          <div className="empty">Nessuna mensilità registrata.</div>
+        )}
+      </article>
+      {manualPayments.length > 0 && (
+        <article className="panel pension-manual-list">
+          <h3>Versamenti manuali</h3>
+          {manualPayments.map((item) => (
+            <div key={item.id}>
+              <span>
+                <AppIcon name="check" /> {formatItalianDate(item.paidAt)}
+                {item.notes ? ` · ${item.notes}` : ""}
+              </span>
+              <strong>{money(item.amount)}</strong>
+            </div>
+          ))}
+        </article>
+      )}
+      {editing && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => !working && setEditing(null)}
+        >
+          <form
+            className="modal"
+            onSubmit={saveEntry}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>FONDO PENSIONE</small>
+                <h2>
+                  {editing === "new" ? "Nuova mensilità" : "Modifica mensilità"}
+                </h2>
+              </div>
+              <button type="button" onClick={() => setEditing(null)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <label>
+              Mese di competenza
+              <input
+                name="month"
+                type="month"
+                required
+                defaultValue={
+                  editing === "new"
+                    ? toIsoDate(new Date()).slice(0, 7)
+                    : editing.competenceMonth
+                }
+              />
+            </label>
+            <label>
+              TFR comunicato
+              <input
+                name="tfr"
+                inputMode="decimal"
+                required
+                defaultValue={
+                  editing === "new" ? "" : amountInput(editing.tfrAmount)
+                }
+                placeholder="0,00"
+              />
+            </label>
+            <div className="pension-form-grid">
+              <label>
+                Contributo personale <small>Facoltativo</small>
+                <input
+                  name="personal"
+                  inputMode="decimal"
+                  defaultValue={
+                    editing === "new"
+                      ? ""
+                      : amountInput(editing.personalContribution)
+                  }
+                  placeholder="0,00"
+                />
+              </label>
+              <label>
+                Contributo datore <small>Facoltativo</small>
+                <input
+                  name="employer"
+                  inputMode="decimal"
+                  defaultValue={
+                    editing === "new"
+                      ? ""
+                      : amountInput(editing.employerContribution)
+                  }
+                  placeholder="0,00"
+                />
+              </label>
+            </div>
+            <label>
+              Note
+              <textarea
+                name="notes"
+                defaultValue={editing === "new" ? "" : editing.notes}
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setEditing(null)}
+              >
+                Annulla
+              </button>
+              <button className="save-action transfer" disabled={working}>
+                {working ? "Salvataggio…" : "Salva"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {confirming && (
+        <div className="modal-backdrop" onMouseDown={() => setConfirming(null)}>
+          <form
+            className="modal"
+            onSubmit={confirmPayment}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>CONFERMA INCASSO</small>
+                <h2>{monthLabel(confirming.competenceMonth)}</h2>
+              </div>
+              <button type="button" onClick={() => setConfirming(null)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <label>
+              Data effettiva
+              <input
+                name="paidAt"
+                type="date"
+                required
+                defaultValue={toIsoDate(new Date())}
+              />
+            </label>
+            <label>
+              Importo realmente accreditato
+              <input
+                name="paidAmount"
+                inputMode="decimal"
+                required
+                defaultValue={amountInput(expected(confirming))}
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setConfirming(null)}
+              >
+                Annulla
+              </button>
+              <button className="save-action transfer">Conferma incasso</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {addingBalance && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => setAddingBalance(false)}
+        >
+          <form
+            className="modal"
+            onSubmit={saveBalance}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>SALDO DEL FONDO</small>
+                <h2>Nuova rilevazione</h2>
+              </div>
+              <button type="button" onClick={() => setAddingBalance(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <label>
+              Data rilevazione
+              <input
+                name="observedAt"
+                type="date"
+                required
+                defaultValue={toIsoDate(new Date())}
+              />
+            </label>
+            <label>
+              Saldo mostrato dal fondo
+              <input
+                name="balance"
+                inputMode="decimal"
+                required
+                placeholder="0,00"
+              />
+            </label>
+            <label>
+              Note
+              <textarea name="notes" />
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setAddingBalance(false)}
+              >
+                Annulla
+              </button>
+              <button className="save-action transfer">Salva saldo</button>
+            </div>
+          </form>
+        </div>
+      )}
+      {addingPayment && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => setAddingPayment(false)}
+        >
+          <form
+            className="modal pension-payment-modal"
+            onSubmit={addPayment}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>FONDO PENSIONE</small>
+                <h2>Aggiungi versamento</h2>
+              </div>
+              <button type="button" onClick={() => setAddingPayment(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <div className="type-switch">
+              <button
+                type="button"
+                className={paymentMode === "months" ? "selected income" : ""}
+                onClick={() => setPaymentMode("months")}
+              >
+                Mensilità da incassare
+              </button>
+              <button
+                type="button"
+                className={paymentMode === "manual" ? "selected income" : ""}
+                onClick={() => setPaymentMode("manual")}
+              >
+                Inserimento manuale
+              </button>
+            </div>
+            <label>
+              Data effettiva del versamento
+              <input
+                name="paidAt"
+                type="date"
+                required
+                defaultValue={toIsoDate(new Date())}
+              />
+            </label>
+            {paymentMode === "months" ? (
+              <div className="pending-month-selector">
+                {entries
+                  .filter((item) => item.status === "pending")
+                  .map((item) => (
+                    <label key={item.id}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPendingIds.includes(item.id)}
+                        onChange={() =>
+                          setSelectedPendingIds((current) =>
+                            current.includes(item.id)
+                              ? current.filter((id) => id !== item.id)
+                              : [...current, item.id],
+                          )
+                        }
+                      />
+                      <span>
+                        <b>{monthLabel(item.competenceMonth)}</b>
+                        <small>TFR e contributi</small>
+                      </span>
+                      <strong>{money(expected(item))}</strong>
+                    </label>
+                  ))}
+                {!entries.some((item) => item.status === "pending") && (
+                  <div className="empty">Nessuna mensilità da incassare.</div>
+                )}
+              </div>
+            ) : (
+              <>
+                <label>
+                  Importo realmente accreditato
+                  <input
+                    name="amount"
+                    inputMode="decimal"
+                    required
+                    placeholder="0,00"
+                  />
+                </label>
+                <label>
+                  Descrizione o note
+                  <textarea
+                    name="notes"
+                    placeholder="Es. Versamento iniziale"
+                  />
+                </label>
+              </>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setAddingPayment(false)}
+              >
+                Annulla
+              </button>
+              <button
+                className="save-action transfer"
+                disabled={
+                  paymentMode === "months" && !selectedPendingIds.length
+                }
+              >
+                Conferma versamento
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
