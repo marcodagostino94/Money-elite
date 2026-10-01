@@ -2808,7 +2808,7 @@ header h1 {
 
 .pension-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -2846,6 +2846,24 @@ header h1 {
   background: #fff3f2;
   border-color: #efcac7;
   color: #b34843;
+}
+.pension-summary .company-tfr-summary {
+  background: #fff8e9;
+  border-color: #ead5a6;
+  color: #8b681c;
+}
+.company-tfr-summary button {
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 8px;
+  color: inherit;
+  font-size: 9px;
+}
+.pension-payment-modal .type-switch {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.company-transfer-list > div {
+  color: #8b681c;
 }
 .pension-toolbar {
   display: flex;

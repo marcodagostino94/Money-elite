@@ -8426,8 +8426,9 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Fondo pensione con incassi annullabili e selezione multipla;
-              budget persistenti mensili o a durata personalizzata.
+              Fondo pensione con TFR separato lasciato in azienda e
+              trasferimenti tracciati; budget persistenti mensili o a durata
+              personalizzata.
             </p>
           </div>
         </article>
@@ -8467,6 +8468,11 @@ type PensionFundManualPayment = {
   amount: number;
   notes: string;
 };
+type PensionFundCompanyTransfer = PensionFundManualPayment;
+type PensionFundCompanyTfr = {
+  initialAmount: number;
+  currentBalance: number;
+};
 
 function PensionFundSection() {
   const [entries, setEntries] = useState<PensionFundEntry[]>([]);
@@ -8474,12 +8480,21 @@ function PensionFundSection() {
   const [manualPayments, setManualPayments] = useState<
     PensionFundManualPayment[]
   >([]);
+  const [companyTransfers, setCompanyTransfers] = useState<
+    PensionFundCompanyTransfer[]
+  >([]);
+  const [companyTfr, setCompanyTfr] = useState<PensionFundCompanyTfr | null>(
+    null,
+  );
   const [busy, setBusy] = useState(true);
   const [editing, setEditing] = useState<PensionFundEntry | "new" | null>(null);
   const [confirming, setConfirming] = useState<PensionFundEntry | null>(null);
   const [addingBalance, setAddingBalance] = useState(false);
   const [addingPayment, setAddingPayment] = useState(false);
-  const [paymentMode, setPaymentMode] = useState<"months" | "manual">("months");
+  const [editingCompanyTfr, setEditingCompanyTfr] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<
+    "months" | "manual" | "company"
+  >("months");
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const load = async () => {
@@ -8489,6 +8504,8 @@ function PensionFundSection() {
       { data: entryRows, error: entryError },
       { data: snapshotRows, error: snapshotError },
       { data: paymentRows, error: paymentError },
+      { data: companyRows, error: companyError },
+      { data: transferRows, error: transferError },
     ] = await Promise.all([
       supabase
         .from("pension_fund_entries")
@@ -8502,12 +8519,25 @@ function PensionFundSection() {
         .from("pension_fund_manual_payments")
         .select("*")
         .order("paid_at", { ascending: false }),
+      supabase.from("pension_fund_company_tfr").select("*").maybeSingle(),
+      supabase
+        .from("pension_fund_company_transfers")
+        .select("*")
+        .order("paid_at", { ascending: false }),
     ]);
-    if (entryError || snapshotError || paymentError) {
+    if (
+      entryError ||
+      snapshotError ||
+      paymentError ||
+      companyError ||
+      transferError
+    ) {
       alert(
         entryError?.message ||
           snapshotError?.message ||
           paymentError?.message ||
+          companyError?.message ||
+          transferError?.message ||
           "Impossibile caricare il fondo pensione.",
       );
       setBusy(false);
@@ -8542,6 +8572,22 @@ function PensionFundSection() {
         notes: row.notes || "",
       })),
     );
+    setCompanyTfr(
+      companyRows
+        ? {
+            initialAmount: Number(companyRows.initial_amount),
+            currentBalance: Number(companyRows.current_balance),
+          }
+        : null,
+    );
+    setCompanyTransfers(
+      (transferRows || []).map((row) => ({
+        id: row.id,
+        paidAt: row.paid_at,
+        amount: Number(row.amount),
+        notes: row.notes || "",
+      })),
+    );
     setBusy(false);
   };
   useEffect(() => {
@@ -8554,7 +8600,8 @@ function PensionFundSection() {
     entries
       .filter((item) => item.status === "paid")
       .reduce((sum, item) => sum + (item.paidAmount ?? expected(item)), 0) +
-    manualPayments.reduce((sum, item) => sum + item.amount, 0);
+    manualPayments.reduce((sum, item) => sum + item.amount, 0) +
+    companyTransfers.reduce((sum, item) => sum + item.amount, 0);
   const totalPending = entries
     .filter((item) => item.status === "pending")
     .reduce((sum, item) => sum + expected(item), 0);
@@ -8637,6 +8684,32 @@ function PensionFundSection() {
     setAddingBalance(false);
     await load();
   };
+  const saveCompanyTfr = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const amount = Math.abs(parseItalianAmount(fd.get("companyTfr")));
+    const supabase = getSupabaseBrowserClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const { error } = companyTfr
+      ? await supabase
+          .from("pension_fund_company_tfr")
+          .update({
+            current_balance: amount,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+      : await supabase.from("pension_fund_company_tfr").insert({
+          user_id: user.id,
+          initial_amount: amount,
+          current_balance: amount,
+        });
+    if (error) return alert(error.message);
+    setEditingCompanyTfr(false);
+    await load();
+  };
   const addPayment = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const fd = new FormData(event.currentTarget);
@@ -8661,7 +8734,7 @@ function PensionFundSection() {
       );
       const error = results.find((result) => result.error)?.error;
       if (error) return alert(error.message);
-    } else {
+    } else if (paymentMode === "manual") {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -8674,6 +8747,17 @@ function PensionFundSection() {
           amount: Math.abs(parseItalianAmount(fd.get("amount"))),
           notes: String(fd.get("notes") || "").trim() || null,
         });
+      if (error) return alert(error.message);
+    } else {
+      const amount = Math.abs(parseItalianAmount(fd.get("amount")));
+      if (!amount || amount > (companyTfr?.currentBalance || 0)) {
+        return alert("L’importo supera il TFR ancora disponibile in azienda.");
+      }
+      const { error } = await supabase.rpc("transfer_company_tfr", {
+        transfer_amount: amount,
+        transfer_date: paidAt,
+        transfer_notes: String(fd.get("notes") || "").trim() || null,
+      });
       if (error) return alert(error.message);
     }
     setAddingPayment(false);
@@ -8698,12 +8782,23 @@ function PensionFundSection() {
     <section className="section-page pension-page">
       <div className="pension-summary">
         <div>
-          <small>TOTALE MATURATO</small>
+          <small>MATURATO NEL FONDO</small>
           <strong>{money(totalMatured)}</strong>
         </div>
         <div className="paid">
           <small>REALMENTE INCASSATO</small>
           <strong>{money(totalPaid)}</strong>
+        </div>
+        <div className="company-tfr-summary">
+          <small>TFR RIMASTO IN AZIENDA</small>
+          <strong>{money(companyTfr?.currentBalance || 0)}</strong>
+          <span>Non incluso nel fondo pensione</span>
+          <button
+            className="outline"
+            onClick={() => setEditingCompanyTfr(true)}
+          >
+            {companyTfr ? "Modifica indicazione" : "Inserisci importo"}
+          </button>
         </div>
         <div className="pending">
           <small>ANCORA DA INCASSARE</small>
@@ -8723,7 +8818,13 @@ function PensionFundSection() {
         <button className="outline" onClick={() => setAddingBalance(true)}>
           Aggiorna saldo reale
         </button>
-        <button className="outline" onClick={() => setAddingPayment(true)}>
+        <button
+          className="outline"
+          onClick={() => {
+            setPaymentMode("months");
+            setAddingPayment(true);
+          }}
+        >
           ＋ Aggiungi versamento
         </button>
         <button className="primary" onClick={() => setEditing("new")}>
@@ -8813,6 +8914,68 @@ function PensionFundSection() {
             </div>
           ))}
         </article>
+      )}
+      {companyTransfers.length > 0 && (
+        <article className="panel pension-manual-list company-transfer-list">
+          <h3>Trasferimenti TFR dall’azienda</h3>
+          {companyTransfers.map((item) => (
+            <div key={item.id}>
+              <span>
+                <AppIcon name="transfer" /> {formatItalianDate(item.paidAt)}
+                {item.notes ? ` · ${item.notes}` : ""}
+              </span>
+              <strong>{money(item.amount)}</strong>
+            </div>
+          ))}
+        </article>
+      )}
+      {editingCompanyTfr && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={() => setEditingCompanyTfr(false)}
+        >
+          <form
+            className="modal"
+            onSubmit={saveCompanyTfr}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="modal-title">
+              <div>
+                <small>INDICAZIONE SEPARATA</small>
+                <h2>TFR lasciato in azienda</h2>
+              </div>
+              <button type="button" onClick={() => setEditingCompanyTfr(false)}>
+                <AppIcon name="close" />
+              </button>
+            </div>
+            <p className="modal-hint">
+              Questo importo non viene sommato al fondo pensione. Diminuirà solo
+              quando registrerai un trasferimento dall’azienda.
+            </p>
+            <label>
+              Importo ancora in azienda
+              <input
+                name="companyTfr"
+                inputMode="decimal"
+                required
+                defaultValue={amountInput(companyTfr?.currentBalance)}
+                placeholder="0,00"
+              />
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="cancel"
+                onClick={() => setEditingCompanyTfr(false)}
+              >
+                Annulla
+              </button>
+              <button className="save-action transfer">
+                Salva indicazione
+              </button>
+            </div>
+          </form>
+        </div>
       )}
       {editing && (
         <div
@@ -9045,6 +9208,14 @@ function PensionFundSection() {
               >
                 Inserimento manuale
               </button>
+              <button
+                type="button"
+                className={paymentMode === "company" ? "selected income" : ""}
+                disabled={!companyTfr?.currentBalance}
+                onClick={() => setPaymentMode("company")}
+              >
+                Trasferisci da azienda
+              </button>
             </div>
             <label>
               Data effettiva del versamento
@@ -9104,7 +9275,9 @@ function PensionFundSection() {
             ) : (
               <>
                 <label>
-                  Importo realmente accreditato
+                  {paymentMode === "company"
+                    ? `Importo da trasferire · disponibile ${money(companyTfr?.currentBalance || 0)}`
+                    : "Importo realmente accreditato"}
                   <input
                     name="amount"
                     inputMode="decimal"
@@ -9116,7 +9289,11 @@ function PensionFundSection() {
                   Descrizione o note
                   <textarea
                     name="notes"
-                    placeholder="Es. Versamento iniziale"
+                    placeholder={
+                      paymentMode === "company"
+                        ? "Es. Trasferimento TFR pregresso"
+                        : "Es. Versamento iniziale"
+                    }
                   />
                 </label>
               </>
