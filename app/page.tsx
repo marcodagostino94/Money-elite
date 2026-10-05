@@ -8413,7 +8413,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 12.3.0</h2>
+          <h2>Money Elite versione 12.4.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8479,6 +8479,7 @@ type PensionFundEntry = {
   tfrAmount: number;
   personalContribution: number;
   employerContribution: number;
+  destination: "fund" | "company";
   status: "pending" | "paid";
   paidAt: string | null;
   paidAmount: number | null;
@@ -8510,6 +8511,9 @@ function PensionFundSection() {
   );
   const [busy, setBusy] = useState(true);
   const [editing, setEditing] = useState<PensionFundEntry | "new" | null>(null);
+  const [entryDestination, setEntryDestination] = useState<"fund" | "company">(
+    "fund",
+  );
   const [confirming, setConfirming] = useState<PensionFundEntry | null>(null);
   const [addingPayment, setAddingPayment] = useState(false);
   const [editingCompanyTfr, setEditingCompanyTfr] = useState(false);
@@ -8559,6 +8563,7 @@ function PensionFundSection() {
         tfrAmount: Number(row.tfr_amount),
         personalContribution: Number(row.personal_contribution || 0),
         employerContribution: Number(row.employer_contribution || 0),
+        destination: row.destination === "company" ? "company" : "fund",
         status: row.status,
         paidAt: row.paid_at,
         paidAmount: row.paid_amount == null ? null : Number(row.paid_amount),
@@ -8597,16 +8602,18 @@ function PensionFundSection() {
   const expected = (item: PensionFundEntry) =>
     item.tfrAmount + item.personalContribution + item.employerContribution;
   const totalMatured =
-    entries.reduce((sum, item) => sum + expected(item), 0) +
+    entries
+      .filter((item) => item.destination === "fund")
+      .reduce((sum, item) => sum + expected(item), 0) +
     companyTransfers.reduce((sum, item) => sum + item.amount, 0);
   const totalPaid =
     entries
-      .filter((item) => item.status === "paid")
+      .filter((item) => item.destination === "fund" && item.status === "paid")
       .reduce((sum, item) => sum + (item.paidAmount ?? expected(item)), 0) +
     manualPayments.reduce((sum, item) => sum + item.amount, 0) +
     companyTransfers.reduce((sum, item) => sum + item.amount, 0);
   const totalPending = entries
-    .filter((item) => item.status === "pending")
+    .filter((item) => item.destination === "fund" && item.status === "pending")
     .reduce((sum, item) => sum + expected(item), 0);
   const monthLabel = (value: string) =>
     new Intl.DateTimeFormat("it-IT", { month: "long", year: "numeric" }).format(
@@ -8628,7 +8635,11 @@ function PensionFundSection() {
       tfr_amount: Math.abs(parseItalianAmount(fd.get("tfr"))),
       personal_contribution: Math.abs(parseItalianAmount(fd.get("personal"))),
       employer_contribution: Math.abs(parseItalianAmount(fd.get("employer"))),
+      destination: String(fd.get("destination")),
       notes: String(fd.get("notes") || "").trim() || null,
+      ...(editing !== "new" && editing.destination !== entryDestination
+        ? { status: "pending", paid_at: null, paid_amount: null }
+        : {}),
     };
     const result =
       editing === "new"
@@ -8701,8 +8712,9 @@ function PensionFundSection() {
     const supabase = getSupabaseBrowserClient();
     if (paymentMode === "months") {
       if (!selectedPendingIds.length) return;
-      const selected = entries.filter((item) =>
-        selectedPendingIds.includes(item.id),
+      const selected = entries.filter(
+        (item) =>
+          selectedPendingIds.includes(item.id) && item.destination === "fund",
       );
       const results = await Promise.all(
         selected.map((item) =>
@@ -8800,7 +8812,13 @@ function PensionFundSection() {
         >
           ＋ Aggiungi versamento
         </button>
-        <button className="primary" onClick={() => setEditing("new")}>
+        <button
+          className="primary"
+          onClick={() => {
+            setEntryDestination("fund");
+            setEditing("new");
+          }}
+        >
           ＋ Nuova mensilità
         </button>
       </div>
@@ -8809,9 +8827,20 @@ function PensionFundSection() {
           <div className="empty">Caricamento…</div>
         ) : (
           entries.map((item) => (
-            <div className={`pension-row ${item.status}`} key={item.id}>
+            <div
+              className={`pension-row ${item.destination === "company" ? "company" : item.status}`}
+              key={item.id}
+            >
               <div className="pension-state">
-                <AppIcon name={item.status === "paid" ? "check" : "clock"} />
+                <AppIcon
+                  name={
+                    item.destination === "company"
+                      ? "building"
+                      : item.status === "paid"
+                        ? "check"
+                        : "clock"
+                  }
+                />
               </div>
               <div>
                 <h3>{monthLabel(item.competenceMonth)}</h3>
@@ -8835,13 +8864,15 @@ function PensionFundSection() {
                   )}
                 </strong>
                 <span>
-                  {item.status === "paid"
-                    ? `Incassato${item.paidAt ? ` il ${formatItalianDate(item.paidAt)}` : ""}`
-                    : "Da incassare"}
+                  {item.destination === "company"
+                    ? "Accantonato in azienda"
+                    : item.status === "paid"
+                      ? `Incassato${item.paidAt ? ` il ${formatItalianDate(item.paidAt)}` : ""}`
+                      : "Da incassare"}
                 </span>
               </div>
               <div className="pension-actions">
-                {item.status === "pending" && (
+                {item.destination === "fund" && item.status === "pending" && (
                   <button
                     className="confirm"
                     onClick={() => setConfirming(item)}
@@ -8849,7 +8880,7 @@ function PensionFundSection() {
                     Conferma
                   </button>
                 )}
-                {item.status === "paid" && (
+                {item.destination === "fund" && item.status === "paid" && (
                   <button
                     className="undo"
                     onClick={() => void undoPayment(item)}
@@ -8857,7 +8888,12 @@ function PensionFundSection() {
                     Annulla incasso
                   </button>
                 )}
-                <button onClick={() => setEditing(item)}>
+                <button
+                  onClick={() => {
+                    setEntryDestination(item.destination);
+                    setEditing(item);
+                  }}
+                >
                   <AppIcon name="edit" />
                 </button>
                 <button
@@ -9006,6 +9042,35 @@ function PensionFundSection() {
                 }
               />
             </label>
+            <fieldset className="pension-destination-fieldset">
+              <legend>Dove viene accantonato il TFR?</legend>
+              <input
+                type="hidden"
+                name="destination"
+                value={entryDestination}
+              />
+              <div className="type-switch">
+                <button
+                  type="button"
+                  className={entryDestination === "fund" ? "selected" : ""}
+                  onClick={() => setEntryDestination("fund")}
+                >
+                  Fondo pensione
+                </button>
+                <button
+                  type="button"
+                  className={entryDestination === "company" ? "selected" : ""}
+                  onClick={() => setEntryDestination("company")}
+                >
+                  TFR in azienda
+                </button>
+              </div>
+              <small>
+                {entryDestination === "fund"
+                  ? "La mensilità entrerà nei conteggi maturato, da incassare e incassato."
+                  : "La mensilità aumenterà soltanto il TFR maturato in azienda."}
+              </small>
+            </fieldset>
             <label>
               TFR comunicato
               <input
@@ -9018,34 +9083,36 @@ function PensionFundSection() {
                 placeholder="0,00"
               />
             </label>
-            <div className="pension-form-grid">
-              <label>
-                Contributo personale <small>Facoltativo</small>
-                <input
-                  name="personal"
-                  inputMode="decimal"
-                  defaultValue={
-                    editing === "new"
-                      ? ""
-                      : amountInput(editing.personalContribution)
-                  }
-                  placeholder="0,00"
-                />
-              </label>
-              <label>
-                Contributo datore <small>Facoltativo</small>
-                <input
-                  name="employer"
-                  inputMode="decimal"
-                  defaultValue={
-                    editing === "new"
-                      ? ""
-                      : amountInput(editing.employerContribution)
-                  }
-                  placeholder="0,00"
-                />
-              </label>
-            </div>
+            {entryDestination === "fund" && (
+              <div className="pension-form-grid">
+                <label>
+                  Contributo personale <small>Facoltativo</small>
+                  <input
+                    name="personal"
+                    inputMode="decimal"
+                    defaultValue={
+                      editing === "new"
+                        ? ""
+                        : amountInput(editing.personalContribution)
+                    }
+                    placeholder="0,00"
+                  />
+                </label>
+                <label>
+                  Contributo datore <small>Facoltativo</small>
+                  <input
+                    name="employer"
+                    inputMode="decimal"
+                    defaultValue={
+                      editing === "new"
+                        ? ""
+                        : amountInput(editing.employerContribution)
+                    }
+                    placeholder="0,00"
+                  />
+                </label>
+              </div>
+            )}
             <label>
               Note
               <textarea
@@ -9171,7 +9238,11 @@ function PensionFundSection() {
               <>
                 <div className="pending-month-selector">
                   {entries
-                    .filter((item) => item.status === "pending")
+                    .filter(
+                      (item) =>
+                        item.destination === "fund" &&
+                        item.status === "pending",
+                    )
                     .map((item) => (
                       <label key={item.id}>
                         <input
@@ -9192,7 +9263,10 @@ function PensionFundSection() {
                         <strong>{money(expected(item))}</strong>
                       </label>
                     ))}
-                  {!entries.some((item) => item.status === "pending") && (
+                  {!entries.some(
+                    (item) =>
+                      item.destination === "fund" && item.status === "pending",
+                  ) && (
                     <div className="empty">Nessuna mensilità da incassare.</div>
                   )}
                 </div>

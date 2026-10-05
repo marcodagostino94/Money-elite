@@ -2917,6 +2917,33 @@ header h1 {
 .pension-row.pending .pension-amount {
   color: #b34843;
 }
+.pension-row.company .pension-state {
+  color: #8a6226;
+  background: #fff3d8;
+}
+.pension-row.company .pension-amount {
+  color: #8a6226;
+}
+.pension-destination-fieldset {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.pension-destination-fieldset legend {
+  padding: 0 5px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.pension-destination-fieldset .type-switch {
+  grid-template-columns: 1fr 1fr;
+}
+.pension-destination-fieldset > small {
+  display: block;
+  margin-top: 8px;
+  color: #777;
+  font-size: 9px;
+}
 .pension-row h3 {
   margin: 0 0 4px;
   text-transform: capitalize;

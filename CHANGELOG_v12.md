@@ -1,4 +1,11 @@
-# Money Elite 12.3.0
+# Money Elite 12.4.0
+
+## Novità 12.4
+
+- In `Nuova mensilità` del Fondo pensione si può scegliere tra `Fondo pensione` e `TFR in azienda`.
+- Le mensilità destinate all’azienda aumentano esclusivamente il saldo TFR aziendale.
+- Le mensilità aziendali non entrano nei conteggi `Da incassare` e `Incassato`.
+- Modifica, spostamento o eliminazione di una mensilità rettificano automaticamente il saldo corretto.
 
 ## Novità 12.3
 

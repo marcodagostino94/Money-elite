@@ -6,6 +6,7 @@ create table if not exists public.pension_fund_entries (
   tfr_amount numeric(14,2) not null check (tfr_amount >= 0),
   personal_contribution numeric(14,2) not null default 0 check (personal_contribution >= 0),
   employer_contribution numeric(14,2) not null default 0 check (employer_contribution >= 0),
+  destination text not null default 'fund' check (destination in ('fund','company')),
   status text not null default 'pending' check (status in ('pending','paid')),
   paid_at date,
   paid_amount numeric(14,2) check (paid_amount is null or paid_amount >= 0),
