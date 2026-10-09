@@ -1,4 +1,4 @@
-+begin;
+begin;
 
 alter table public.pension_fund_entries
   add column if not exists destination text not null default 'fund';

@@ -2806,6 +2806,37 @@ header h1 {
   }
 }
 
+.offline-status {
+  display: flex;
+  gap: 8px 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 11px 14px;
+  border: 1px solid #e8c56c;
+  border-radius: 12px;
+  color: #6b4b08;
+  background: #fff7dc;
+  font-size: 13px;
+}
+.offline-status.syncing {
+  border-color: #b8d8cc;
+  color: #28624d;
+  background: #eff9f5;
+}
+.offline-transaction-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #725109;
+  background: #fff0b8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  vertical-align: 1px;
+}
+
 .pension-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

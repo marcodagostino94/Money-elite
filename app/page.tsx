@@ -4,6 +4,15 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import * as L from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  enqueueOfflineTransaction,
+  listOfflineTransactions,
+  loadOfflineSnapshot,
+  removeOfflineTransaction,
+  saveOfflineSnapshot,
+  type MoneyDataSnapshot,
+  type OfflineTransactionPayload,
+} from "@/lib/offline";
 import { CondominiumSection } from "./condominium";
 import {
   formatItalianDate,
@@ -71,6 +80,7 @@ type Transaction = {
   destinationCurrency?: string;
   destinationAmount?: number | null;
   exchangeRate?: number | null;
+  offlinePending?: boolean;
 };
 
 type AccountDraft = {
@@ -2546,7 +2556,12 @@ function TransactionRow({
         )}
       </div>
       <div className="transaction-info">
-        <b>{title}</b>
+        <b>
+          {title}
+          {t.offlinePending && (
+            <small className="offline-transaction-badge">Da sincronizzare</small>
+          )}
+        </b>
         <span>{subtitle}</span>
       </div>
       <div className="transaction-amount">
@@ -8413,7 +8428,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 12.4.0</h2>
+          <h2>Money Elite versione 13.0.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8456,8 +8471,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Nuova gestione Condominio con preventivi, consuntivi, rate e
-              collegamento facoltativo alle transazioni pianificate.
+              Apertura offline con dati locali e sincronizzazione automatica
+              delle nuove entrate, uscite e dei giroconti semplici.
             </p>
           </div>
         </article>
@@ -12326,6 +12341,8 @@ export default function Home() {
   const confirmingRecurrences = useRef(new Set<string>());
   const [dataBusy, setDataBusy] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlinePendingCount, setOfflinePendingCount] = useState(0);
   const [selectedTransaction, setSelectedTransaction] =
     useState<Transaction | null>(null);
   useEffect(() => {
@@ -12343,6 +12360,106 @@ export default function Home() {
     return () => window.cancelAnimationFrame(frame);
   }, [active]);
   const refreshSequence = useRef(0);
+  const queuedRow = (payload: OfflineTransactionPayload): MoneyTransaction => ({
+    id: payload.id,
+    kind: payload.kind,
+    accountId: payload.account_id,
+    cardId: payload.card_id,
+    destinationAccountId: payload.destination_account_id,
+    categoryId: payload.category_id,
+    recurrenceId: null,
+    refundOfId: null,
+    amount: payload.amount,
+    voucherCount: payload.voucher_count,
+    transactionDate: payload.transaction_date,
+    dueDate: null,
+    confirmedAt: payload.confirmed_at,
+    accountedAt: payload.accounted_at,
+    notes: payload.notes ?? "",
+    destinationAmount: payload.destination_amount,
+    exchangeRate: payload.exchange_rate,
+  });
+  const accountsWithQueue = (
+    base: MoneyAccount[],
+    queued: OfflineTransactionPayload[],
+  ) =>
+    queued.reduce((current, payload) => {
+      if (payload.card_id) return current;
+      return current.map((account) => {
+        let delta = 0;
+        let voucherDelta = 0;
+        if (payload.kind === "transfer") {
+          if (account.id === payload.account_id) delta -= payload.amount;
+          if (account.id === payload.destination_account_id)
+            delta += payload.destination_amount ?? payload.amount;
+        } else if (account.id === payload.account_id) {
+          delta += payload.kind === "expense" ? -payload.amount : payload.amount;
+          if (account.type === "meal_vouchers" && payload.voucher_count)
+            voucherDelta +=
+              payload.kind === "expense"
+                ? -payload.voucher_count
+                : payload.voucher_count;
+        }
+        return delta || voucherDelta
+          ? {
+              ...account,
+              balance: account.balance + delta,
+              voucherCount: account.voucherCount + voucherDelta,
+            }
+          : account;
+      });
+    }, base);
+  const applySnapshot = async (
+    data: MoneyDataSnapshot,
+    activeUser: User,
+    includeQueue = true,
+  ) => {
+    const queue = includeQueue
+      ? await listOfflineTransactions(activeUser.id)
+      : [];
+    const queuedPayloads = queue.map((item) => item.payload);
+    const orderedAccounts = accountsWithQueue(data.accounts, queuedPayloads);
+    setAccounts(orderedAccounts);
+    setPrimaryCurrency(data.primaryCurrency);
+    window.localStorage.setItem(PRIMARY_CURRENCY_KEY, data.primaryCurrency);
+    setCategories(data.categories);
+    setCards(data.cards);
+    setBudgets(data.budgets);
+    setRecurrences(data.recurrences);
+    setFinancings(data.financings);
+    setTransactions([
+      ...queuedPayloads.map((payload) => ({
+        ...transactionFromDatabase(
+          queuedRow(payload),
+          orderedAccounts,
+          data.categories,
+          data.cards,
+        ),
+        offlinePending: true,
+      })),
+      ...data.transactions.map((row) =>
+        transactionFromDatabase(
+          row,
+          orderedAccounts,
+          data.categories,
+          data.cards,
+        ),
+      ),
+    ]);
+    setOfflinePendingCount(queue.length);
+  };
+  const flushOfflineQueue = async (activeUser: User) => {
+    const queue = await listOfflineTransactions(activeUser.id);
+    setOfflinePendingCount(queue.length);
+    for (const item of queue) {
+      const { error } = await getSupabaseBrowserClient()
+        .from("transactions")
+        .upsert(item.payload, { onConflict: "id" });
+      if (error) throw error;
+      await removeOfflineTransaction(item.id);
+    }
+    setOfflinePendingCount(0);
+  };
   const accrueDailyInterest = async (
     data: Awaited<ReturnType<typeof loadMoneyData>>,
     activeUser: User,
@@ -12446,6 +12563,18 @@ export default function Home() {
     if (!activeUser) return;
     const sequence = ++refreshSequence.current;
     try {
+      if (!navigator.onLine) {
+        const cached = await loadOfflineSnapshot(activeUser.id);
+        if (!cached)
+          throw new Error(
+            "serve una prima apertura con Internet per salvare i dati sul dispositivo",
+          );
+        if (sequence !== refreshSequence.current) return;
+        await applySnapshot(cached.data, activeUser);
+        setDataError("");
+        return;
+      }
+      await flushOfflineQueue(activeUser);
       let data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
       if (await accrueDailyInterest(data, activeUser))
         data = await loadMoneyData(getSupabaseBrowserClient(), activeUser.id);
@@ -12454,30 +12583,20 @@ export default function Home() {
       // Supabase realtime event. Never let an older/slower refresh overwrite a
       // newer snapshot, otherwise balances can temporarily revert or jump.
       if (sequence !== refreshSequence.current) return;
-
-      const orderedAccounts = data.accounts;
-      setAccounts(orderedAccounts);
-      setPrimaryCurrency(data.primaryCurrency);
-      window.localStorage.setItem(PRIMARY_CURRENCY_KEY, data.primaryCurrency);
-      setCategories(data.categories);
-      setCards(data.cards);
-      setBudgets(data.budgets);
-      setRecurrences(data.recurrences);
-      setFinancings(data.financings);
-      setTransactions(
-        data.transactions.map((row) =>
-          transactionFromDatabase(
-            row,
-            orderedAccounts,
-            data.categories,
-            data.cards,
-          ),
-        ),
-      );
+      await saveOfflineSnapshot(activeUser.id, data);
+      await applySnapshot(data, activeUser, false);
       setDataError("");
     } catch (error) {
       if (sequence !== refreshSequence.current) return;
       console.error(error);
+      const cached = await loadOfflineSnapshot(activeUser.id).catch(() => null);
+      if (cached) {
+        await applySnapshot(cached.data, activeUser);
+        setDataError(
+          "Connessione assente: stai usando i dati salvati sul dispositivo.",
+        );
+        return;
+      }
       const message =
         typeof error === "object" && error && "message" in error
           ? String(error.message)
@@ -12489,6 +12608,18 @@ export default function Home() {
   };
   const saveTransaction = async (transaction: Transaction) => {
     if (!user) return;
+    if (
+      !isOnline &&
+      (modal?.editing ||
+        transaction.planned ||
+        transaction.isRefund ||
+        Boolean(transaction.recurrenceId))
+    ) {
+      setDataError(
+        "Offline puoi aggiungere soltanto una nuova entrata, uscita o giroconto semplice.",
+      );
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     const account = accounts.find((item) => item.name === transaction.account);
     const destinationAccount = accounts.find(
@@ -12638,6 +12769,7 @@ export default function Home() {
       transaction.confirmedAt,
     );
     const payload = {
+      id: transaction.id,
       user_id: user.id,
       kind: transaction.isRefund
         ? "refund"
@@ -12701,6 +12833,7 @@ export default function Home() {
           ? transaction.dueDate
           : null,
       accounted: Boolean(transaction.accounted),
+      offlinePending: !isOnline,
     };
     setTransactions((current) =>
       modal?.editing
@@ -12710,6 +12843,19 @@ export default function Home() {
         : [optimisticTransaction, ...current],
     );
     setModal(null);
+    if (!isOnline) {
+      const offlinePayload = payload as OfflineTransactionPayload;
+      await enqueueOfflineTransaction({
+        id: transaction.id,
+        userId: user.id,
+        createdAt: new Date().toISOString(),
+        payload: offlinePayload,
+      });
+      setOfflinePendingCount((count) => count + 1);
+      setAccounts((current) => accountsWithQueue(current, [offlinePayload]));
+      setDataError("");
+      return;
+    }
     const result = modal?.editing
       ? await supabase
           .from("transactions")
@@ -12728,6 +12874,10 @@ export default function Home() {
     existing?: MoneyFinancing,
   ) => {
     if (!user) return;
+    if (!isOnline) {
+      setDataError("La gestione dei finanziamenti richiede una connessione Internet.");
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     const regular =
       draft.installmentSchedule[1]?.amount ??
@@ -12923,6 +13073,10 @@ export default function Home() {
     });
   };
   const accountTransaction = async () => {
+    if (!isOnline) {
+      setDataError("Per contabilizzare una transazione serve Internet.");
+      return;
+    }
     if (!selectedTransaction) return;
     const transactionId = selectedTransaction.id;
     setTransactions((current) =>
@@ -12943,6 +13097,10 @@ export default function Home() {
     await refreshData();
   };
   const beginRefund = () => {
+    if (!isOnline) {
+      setDataError("Per creare un rimborso serve Internet.");
+      return;
+    }
     if (!selectedTransaction) return;
     const original = selectedTransaction;
     setSelectedTransaction(null);
@@ -12964,8 +13122,8 @@ export default function Home() {
   };
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user ?? null);
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
       setAuthReady(true);
     });
     const { data: listener } = supabase.auth.onAuthStateChange(
@@ -12978,9 +13136,31 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    const updateConnection = () => setIsOnline(navigator.onLine);
+    updateConnection();
+    window.addEventListener("online", updateConnection);
+    window.addEventListener("offline", updateConnection);
+    if ("serviceWorker" in navigator)
+      void navigator.serviceWorker.register(assetPath("/sw.js"));
+    return () => {
+      window.removeEventListener("online", updateConnection);
+      window.removeEventListener("offline", updateConnection);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (user && isOnline) {
+      setDataBusy(transactions.length === 0);
+      void refreshData(user);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline]);
+
+  useEffect(() => {
     if (!user) return;
     setDataBusy(true);
     void refreshData(user);
+    if (!isOnline) return;
     const supabase = getSupabaseBrowserClient();
     const channel = supabase
       .channel(`money-elite-${user.id}`)
@@ -13049,7 +13229,7 @@ export default function Home() {
       void supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, isOnline]);
 
   const signOut = async () => {
     await getSupabaseBrowserClient().auth.signOut();
@@ -13202,6 +13382,10 @@ export default function Home() {
     await refreshData();
   };
   const removeTransaction = async (transaction: Transaction) => {
+    if (!isOnline) {
+      setDataError("Per eliminare una transazione serve Internet.");
+      return;
+    }
     if (!window.confirm("Eliminare definitivamente questa transazione?"))
       return;
     const { error } = await getSupabaseBrowserClient()
@@ -13216,6 +13400,12 @@ export default function Home() {
     await refreshData();
   };
   const confirmPlannedTransaction = async (transaction: Transaction) => {
+    if (!isOnline) {
+      setDataError(
+        "Per confermare una transazione pianificata serve una connessione Internet.",
+      );
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     const recurrence = recurrences.find(
       (item) => item.id === transaction.recurrenceId,
@@ -13480,6 +13670,16 @@ export default function Home() {
         </button>
         <Header active={active} />
         <div className="page-content">
+          {(!isOnline || offlinePendingCount > 0) && (
+            <div className={`offline-status ${isOnline ? "syncing" : ""}`}>
+              <b>{isOnline ? "Sincronizzazione in corso" : "Modalità offline"}</b>
+              <span>
+                {offlinePendingCount > 0
+                  ? `${offlinePendingCount} ${offlinePendingCount === 1 ? "operazione da sincronizzare" : "operazioni da sincronizzare"}.`
+                  : "Puoi aggiungere entrate, uscite e giroconti semplici."}
+              </span>
+            </div>
+          )}
           {dataError && (
             <div className="data-error" role="alert">
               {dataError}
