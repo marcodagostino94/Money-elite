@@ -9717,6 +9717,20 @@ header h1 {
 .financing-card > .progress i {
   background: #247ee8;
 }
+.financing-card > .progress.financing-progress-completed i {
+  background: linear-gradient(90deg, #38a36a, #62bd84);
+}
+.financing-card-head > .financing-completed-label {
+  max-width: 105px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #27734c;
+  background: #e7f6ed;
+  font-size: 8px;
+  line-height: 1.15;
+  letter-spacing: 0.35px;
+  text-align: center;
+}
 .financing-values {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

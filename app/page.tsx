@@ -5995,7 +5995,15 @@ function FinancingSection({
     paidRows(item).reduce((sum, row) => sum + Math.abs(row.amount), 0);
   const paidCount = (item: MoneyFinancing) => paidRows(item).length;
   const remaining = (item: MoneyFinancing) =>
-    Math.max(0, item.totalRepayment - paidAmount(item));
+    item.status === "active"
+      ? Math.max(0, item.totalRepayment - paidAmount(item))
+      : 0;
+  const finalPaidAmount = (item: MoneyFinancing) => {
+    if (item.status === "completed") return item.totalRepayment;
+    if (item.status === "settled")
+      return paidAmount(item) + (item.settlementAmount ?? 0);
+    return paidAmount(item);
+  };
   const openSettlement = (item: MoneyFinancing) => {
     setSettling(item);
     setSettlementAmount(amountInput(remaining(item)));
@@ -6107,10 +6115,11 @@ function FinancingSection({
   };
   const groups: [string, MoneyFinancing[]][] = [
     ["ATTIVI", financings.filter((item) => item.status === "active")],
-    ["COMPLETATI", financings.filter((item) => item.status === "completed")],
     [
-      "SALDATI ANTICIPATAMENTE",
-      financings.filter((item) => item.status === "settled"),
+      "SALDATI E COMPLETATI",
+      financings.filter(
+        (item) => item.status === "completed" || item.status === "settled",
+      ),
     ],
   ];
   const today = toIsoDate(new Date());
@@ -6170,11 +6179,11 @@ function FinancingSection({
                 const recurrence = recurrences.find(
                   (row) => row.id === item.recurrenceId,
                 );
+                const isClosed = item.status !== "active";
                 const count = paidCount(item);
-                const progress = Math.min(
-                  100,
-                  (count / item.installmentCount) * 100,
-                );
+                const progress = isClosed
+                  ? 100
+                  : Math.min(100, (count / item.installmentCount) * 100);
                 const account =
                   cards.find((card) => card.id === recurrence?.cardId)?.name ||
                   accounts.find(
@@ -6191,17 +6200,25 @@ function FinancingSection({
                         <small>{item.lender || "FINANZIAMENTO"}</small>
                         <h3>{item.name}</h3>
                       </div>
-                      <b>
-                        {count}/{item.installmentCount}
-                      </b>
+                      {isClosed ? (
+                        <b className="financing-completed-label">
+                          SALDATO E COMPLETATO
+                        </b>
+                      ) : (
+                        <b>
+                          {count}/{item.installmentCount}
+                        </b>
+                      )}
                     </div>
-                    <div className="progress">
+                    <div
+                      className={`progress ${isClosed ? "financing-progress-completed" : ""}`}
+                    >
                       <i style={{ width: `${progress}%` }} />
                     </div>
                     <div className="financing-values">
                       <div>
                         <small>PAGATO</small>
-                        <b>{money(paidAmount(item))}</b>
+                        <b>{money(finalPaidAmount(item))}</b>
                       </div>
                       <div>
                         <small>RESIDUO</small>
@@ -6210,7 +6227,7 @@ function FinancingSection({
                       <div>
                         <small>PROSSIMA RATA</small>
                         <b>
-                          {recurrence?.active
+                          {!isClosed && recurrence?.active
                             ? formatItalianDate(recurrence.nextDate)
                             : "—"}
                         </b>
@@ -8428,7 +8445,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 13.0.0</h2>
+          <h2>Money Elite versione 13.1.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
