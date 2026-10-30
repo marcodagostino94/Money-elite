@@ -164,6 +164,9 @@ export function CondominiumSection({
   const [finalPeriod, setFinalPeriod] = useState<Period | null>(null);
   const [working, setWorking] = useState(false);
   const [showTransactions, setShowTransactions] = useState(false);
+  const [storedLinkedTransactions, setStoredLinkedTransactions] = useState<
+    LinkedTransaction[]
+  >([]);
 
   const load = async () => {
     setBusy(true);
@@ -199,8 +202,9 @@ export function CondominiumSection({
         notes: row.notes || "",
       })),
     );
-    setInstallments(
-      (installmentResult.data || []).map((row) => ({
+    const loadedInstallments: Installment[] = (
+      installmentResult.data || []
+    ).map((row) => ({
         id: row.id,
         periodId: row.period_id,
         sourcePeriodId: row.source_period_id,
@@ -214,8 +218,44 @@ export function CondominiumSection({
         recurrenceId: row.planned_recurrence_id,
         paidAt: row.paid_at,
         notes: row.notes || "",
-      })),
-    );
+      }));
+    setInstallments(loadedInstallments);
+    const recurrenceIds = loadedInstallments
+      .map((item) => item.recurrenceId)
+      .filter((id): id is string => Boolean(id));
+    if (recurrenceIds.length) {
+      const { data: linkedRows, error: linkedError } = await supabase
+        .from("transactions")
+        .select(
+          "id, kind, account_id, category_id, recurrence_id, confirmed_at, transaction_date, due_date, amount, notes",
+        )
+        .in("recurrence_id", recurrenceIds)
+        .order("transaction_date", { ascending: false });
+      if (linkedError) {
+        alert(linkedError.message);
+        setStoredLinkedTransactions([]);
+      } else {
+        setStoredLinkedTransactions(
+          (linkedRows || []).map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            accountId: row.account_id,
+            categoryId: row.category_id,
+            recurrenceId: row.recurrence_id,
+            confirmedAt: row.confirmed_at,
+            dateISO: row.transaction_date,
+            dueDate: row.due_date,
+            amount: Number(row.amount),
+            account:
+              accounts.find((account) => account.id === row.account_id)?.name ||
+              "Conto",
+            notes: row.notes || "",
+          })),
+        );
+      }
+    } else {
+      setStoredLinkedTransactions([]);
+    }
     setBusy(false);
   };
 
@@ -224,12 +264,19 @@ export function CondominiumSection({
     return () => window.clearTimeout(timer);
   }, []);
 
+  const availableTransactions = [
+    ...storedLinkedTransactions,
+    ...transactions.filter(
+      (transaction) =>
+        !storedLinkedTransactions.some((stored) => stored.id === transaction.id),
+    ),
+  ];
   const isPaid = (item: Installment) =>
     item.amount === 0 ||
     Boolean(
       item.paidAt ||
       (item.recurrenceId &&
-        transactions.some(
+        availableTransactions.some(
           (transaction) =>
             transaction.recurrenceId === item.recurrenceId &&
             transaction.confirmedAt,
@@ -237,7 +284,7 @@ export function CondominiumSection({
     );
   const paymentDate = (item: Installment) =>
     item.paidAt ||
-    transactions.find(
+    availableTransactions.find(
       (transaction) =>
         transaction.recurrenceId === item.recurrenceId &&
         transaction.confirmedAt,
@@ -248,57 +295,12 @@ export function CondominiumSection({
   const linkedInstallmentFor = (
     transaction: LinkedTransaction,
     rows: Installment[],
-  ) => {
-    const direct = rows.find(
+  ) =>
+    rows.find(
       (item) =>
         Boolean(item.recurrenceId) &&
         item.recurrenceId === transaction.recurrenceId,
-    );
-    if (direct) return direct;
-    if (transaction.kind && transaction.kind !== "expense") return null;
-    const transactionAmount = Math.round(Math.abs(transaction.amount) * 100);
-    const transactionDate = transaction.dateISO
-      ? new Date(`${transaction.dateISO}T12:00:00`).getTime()
-      : Number.NaN;
-    const normalizedNotes = (transaction.notes || "").toLocaleLowerCase("it");
-    const candidates = rows
-      .filter((item) => {
-        if (Math.round(Math.abs(item.amount) * 100) !== transactionAmount)
-          return false;
-        if (
-          item.accountId &&
-          transaction.accountId &&
-          item.accountId !== transaction.accountId
-        )
-          return false;
-        if (
-          item.categoryId &&
-          transaction.categoryId &&
-          item.categoryId !== transaction.categoryId
-        )
-          return false;
-        const descriptionMatch = normalizedNotes.includes(
-          item.description.toLocaleLowerCase("it"),
-        );
-        const dueDateMatch = transaction.dueDate === item.dueDate;
-        const dueTime = new Date(`${item.dueDate}T12:00:00`).getTime();
-        const nearDueDate =
-          Number.isFinite(transactionDate) &&
-          Math.abs(transactionDate - dueTime) <= 62 * 86400000;
-        return descriptionMatch || dueDateMatch || nearDueDate;
-      })
-      .sort((a, b) => {
-        if (!Number.isFinite(transactionDate)) return 0;
-        const distanceA = Math.abs(
-          transactionDate - new Date(`${a.dueDate}T12:00:00`).getTime(),
-        );
-        const distanceB = Math.abs(
-          transactionDate - new Date(`${b.dueDate}T12:00:00`).getTime(),
-        );
-        return distanceA - distanceB;
-      });
-    return candidates[0] || null;
-  };
+    ) || null;
   const paidFor = (periodId: string) =>
     rowsFor(periodId)
       .filter(isPaid)
@@ -388,7 +390,7 @@ export function CondominiumSection({
     if (!window.confirm(`Eliminare “${item.description}”?`)) return;
     const supabase = getSupabaseBrowserClient();
     if (item.recurrenceId) {
-      const confirmed = transactions.some(
+      const confirmed = availableTransactions.some(
         (transaction) =>
           transaction.recurrenceId === item.recurrenceId &&
           transaction.confirmedAt,
@@ -415,7 +417,7 @@ export function CondominiumSection({
     const supabase = getSupabaseBrowserClient();
     for (const item of rowsFor(period.id)) {
       if (!item.recurrenceId) continue;
-      const confirmed = transactions.some(
+      const confirmed = availableTransactions.some(
         (transaction) =>
           transaction.recurrenceId === item.recurrenceId &&
           transaction.confirmedAt,
@@ -449,7 +451,7 @@ export function CondominiumSection({
         .eq("id", transaction.id);
       if (error) throw error;
       const hasAnotherConfirmed = installment
-        ? transactions.some(
+        ? availableTransactions.some(
             (item) =>
               item.id !== transaction.id &&
               Boolean(linkedInstallmentFor(item, [installment])) &&
@@ -489,11 +491,20 @@ export function CondominiumSection({
   const selected = periods.find((period) => period.id === selectedId) || null;
   if (selected) {
     const periodRows = rowsFor(selected.id);
-    const linkedTransactions = transactions
+    const linkedTransactions = availableTransactions
       .filter(
         (transaction) => Boolean(linkedInstallmentFor(transaction, periodRows)),
       )
       .sort((a, b) => (b.dateISO || "").localeCompare(a.dateISO || ""));
+    const paidWithoutTransaction = periodRows.filter(
+      (installment) =>
+        isPaid(installment) &&
+        !linkedTransactions.some(
+          (transaction) =>
+            transaction.recurrenceId === installment.recurrenceId &&
+            Boolean(transaction.confirmedAt),
+        ),
+    );
     const paid = paidFor(selected.id);
     const balance = periodBalance(selected);
     const previous = previousFor(selected.managementType, selected);
@@ -629,10 +640,14 @@ export function CondominiumSection({
                 <small>MOVIMENTI COLLEGATI</small>
                 <h3>Transazioni delle rate</h3>
               </div>
-              <span>{linkedTransactions.length} transazioni</span>
+              <span>
+                {linkedTransactions.length + paidWithoutTransaction.length}{" "}
+                riferimenti
+              </span>
             </div>
-            {linkedTransactions.length ? (
-              linkedTransactions.map((transaction) => {
+            {linkedTransactions.length || paidWithoutTransaction.length ? (
+              <>
+                {linkedTransactions.map((transaction) => {
                 const installment = linkedInstallmentFor(
                   transaction,
                   periodRows,
@@ -669,7 +684,30 @@ export function CondominiumSection({
                     </button>
                   </div>
                 );
-              })
+                })}
+                {paidWithoutTransaction.map((installment) => (
+                  <div
+                    className="condominium-linked-row condominium-payment-reason"
+                    key={`reason-${installment.id}`}
+                  >
+                    <div className="condominium-linked-icon">
+                      <Check size={17} />
+                    </div>
+                    <div>
+                      <small>PERCHÉ LA RATA È VERDE</small>
+                      <h3>{installment.description}</h3>
+                      <p>
+                        {installment.amount === 0
+                          ? "Importo azzerato dal credito della gestione precedente: non esiste una transazione."
+                          : installment.paidAt
+                            ? `Pagamento segnato manualmente il ${formatItalianDate(installment.paidAt)}: non esiste una transazione collegata.`
+                            : "Rata considerata pagata senza una transazione collegata."}
+                      </p>
+                    </div>
+                    <strong>{money(Math.abs(installment.amount))}</strong>
+                  </div>
+                ))}
+              </>
             ) : (
               <div className="empty">
                 Nessuna transazione collegata alle rate di questa gestione.
@@ -833,7 +871,7 @@ export function CondominiumSection({
             onSave={async (draft) => {
               const supabase = getSupabaseBrowserClient();
               if (editingInstallment.recurrenceId) {
-                const confirmed = transactions.some(
+                const confirmed = availableTransactions.some(
                   (transaction) =>
                     transaction.recurrenceId ===
                       editingInstallment.recurrenceId &&
