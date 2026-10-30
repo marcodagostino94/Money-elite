@@ -55,6 +55,9 @@ type Installment = {
 
 type LinkedTransaction = {
   id: string;
+  kind?: string;
+  accountId?: string;
+  categoryId?: string | null;
   recurrenceId?: string | null;
   confirmedAt?: string | null;
   dateISO?: string;
@@ -242,6 +245,60 @@ export function CondominiumSection({
     null;
   const rowsFor = (periodId: string) =>
     installments.filter((item) => item.periodId === periodId);
+  const linkedInstallmentFor = (
+    transaction: LinkedTransaction,
+    rows: Installment[],
+  ) => {
+    const direct = rows.find(
+      (item) =>
+        Boolean(item.recurrenceId) &&
+        item.recurrenceId === transaction.recurrenceId,
+    );
+    if (direct) return direct;
+    if (transaction.kind && transaction.kind !== "expense") return null;
+    const transactionAmount = Math.round(Math.abs(transaction.amount) * 100);
+    const transactionDate = transaction.dateISO
+      ? new Date(`${transaction.dateISO}T12:00:00`).getTime()
+      : Number.NaN;
+    const normalizedNotes = (transaction.notes || "").toLocaleLowerCase("it");
+    const candidates = rows
+      .filter((item) => {
+        if (Math.round(Math.abs(item.amount) * 100) !== transactionAmount)
+          return false;
+        if (
+          item.accountId &&
+          transaction.accountId &&
+          item.accountId !== transaction.accountId
+        )
+          return false;
+        if (
+          item.categoryId &&
+          transaction.categoryId &&
+          item.categoryId !== transaction.categoryId
+        )
+          return false;
+        const descriptionMatch = normalizedNotes.includes(
+          item.description.toLocaleLowerCase("it"),
+        );
+        const dueDateMatch = transaction.dueDate === item.dueDate;
+        const dueTime = new Date(`${item.dueDate}T12:00:00`).getTime();
+        const nearDueDate =
+          Number.isFinite(transactionDate) &&
+          Math.abs(transactionDate - dueTime) <= 62 * 86400000;
+        return descriptionMatch || dueDateMatch || nearDueDate;
+      })
+      .sort((a, b) => {
+        if (!Number.isFinite(transactionDate)) return 0;
+        const distanceA = Math.abs(
+          transactionDate - new Date(`${a.dueDate}T12:00:00`).getTime(),
+        );
+        const distanceB = Math.abs(
+          transactionDate - new Date(`${b.dueDate}T12:00:00`).getTime(),
+        );
+        return distanceA - distanceB;
+      });
+    return candidates[0] || null;
+  };
   const paidFor = (periodId: string) =>
     rowsFor(periodId)
       .filter(isPaid)
@@ -385,20 +442,20 @@ export function CondominiumSection({
     setWorking(true);
     try {
       const supabase = getSupabaseBrowserClient();
-      const installment = periodRows.find(
-        (item) => item.recurrenceId === transaction.recurrenceId,
-      );
+      const installment = linkedInstallmentFor(transaction, periodRows);
       const { error } = await supabase
         .from("transactions")
         .delete()
         .eq("id", transaction.id);
       if (error) throw error;
-      const hasAnotherConfirmed = transactions.some(
-        (item) =>
-          item.id !== transaction.id &&
-          item.recurrenceId === transaction.recurrenceId &&
-          Boolean(item.confirmedAt),
-      );
+      const hasAnotherConfirmed = installment
+        ? transactions.some(
+            (item) =>
+              item.id !== transaction.id &&
+              Boolean(linkedInstallmentFor(item, [installment])) &&
+              Boolean(item.confirmedAt),
+          )
+        : false;
       if (installment && transaction.confirmedAt && !hasAnotherConfirmed) {
         const { error: installmentError } = await supabase
           .from("condominium_installments")
@@ -432,18 +489,9 @@ export function CondominiumSection({
   const selected = periods.find((period) => period.id === selectedId) || null;
   if (selected) {
     const periodRows = rowsFor(selected.id);
-    const periodRecurrenceIds = new Set(
-      periodRows
-        .map((item) => item.recurrenceId)
-        .filter((id): id is string => Boolean(id)),
-    );
     const linkedTransactions = transactions
       .filter(
-        (transaction) =>
-          Boolean(
-            transaction.recurrenceId &&
-              periodRecurrenceIds.has(transaction.recurrenceId),
-          ),
+        (transaction) => Boolean(linkedInstallmentFor(transaction, periodRows)),
       )
       .sort((a, b) => (b.dateISO || "").localeCompare(a.dateISO || ""));
     const paid = paidFor(selected.id);
@@ -585,8 +633,9 @@ export function CondominiumSection({
             </div>
             {linkedTransactions.length ? (
               linkedTransactions.map((transaction) => {
-                const installment = periodRows.find(
-                  (item) => item.recurrenceId === transaction.recurrenceId,
+                const installment = linkedInstallmentFor(
+                  transaction,
+                  periodRows,
                 );
                 return (
                   <div className="condominium-linked-row" key={transaction.id}>
