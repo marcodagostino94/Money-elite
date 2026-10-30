@@ -295,12 +295,46 @@ export function CondominiumSection({
   const linkedInstallmentFor = (
     transaction: LinkedTransaction,
     rows: Installment[],
-  ) =>
-    rows.find(
+  ) => {
+    const direct = rows.find(
       (item) =>
         Boolean(item.recurrenceId) &&
         item.recurrenceId === transaction.recurrenceId,
-    ) || null;
+    );
+    if (direct) return direct;
+    if (
+      transaction.kind !== "expense" ||
+      !transaction.confirmedAt ||
+      !transaction.dateISO
+    )
+      return null;
+    const transactionAmount = Math.round(Math.abs(transaction.amount) * 100);
+    const transactionDate = new Date(
+      `${transaction.dateISO}T12:00:00`,
+    ).getTime();
+    const candidates = rows
+      .filter((item) => {
+        if (!item.paidAt || !item.categoryId || !transaction.categoryId)
+          return false;
+        if (item.categoryId !== transaction.categoryId) return false;
+        if (Math.round(Math.abs(item.amount) * 100) !== transactionAmount)
+          return false;
+        const paidDate = new Date(`${item.paidAt}T12:00:00`).getTime();
+        return Math.abs(transactionDate - paidDate) <= 7 * 86400000;
+      })
+      .sort((a, b) => {
+        const distanceA = Math.abs(
+          transactionDate - new Date(`${a.paidAt}T12:00:00`).getTime(),
+        );
+        const distanceB = Math.abs(
+          transactionDate - new Date(`${b.paidAt}T12:00:00`).getTime(),
+        );
+        const sameAccountA = a.accountId === transaction.accountId ? 0 : 1;
+        const sameAccountB = b.accountId === transaction.accountId ? 0 : 1;
+        return distanceA - distanceB || sameAccountA - sameAccountB;
+      });
+    return candidates[0] || null;
+  };
   const paidFor = (periodId: string) =>
     rowsFor(periodId)
       .filter(isPaid)
