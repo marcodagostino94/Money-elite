@@ -31,6 +31,7 @@ type Section =
   | "Dashboard"
   | "Bilancio"
   | "Transazioni"
+  | "Non contabilizzate"
   | "Pianificate"
   | "Abbonamenti"
   | "Finanziamenti"
@@ -283,6 +284,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Dashboard", icon: "dashboard" },
   { label: "Bilancio", icon: "balance" },
   { label: "Transazioni", icon: "transactions" },
+  { label: "Non contabilizzate", icon: "check" },
   { label: "Pianificate", icon: "planned" },
   { label: "Abbonamenti", icon: "subscriptions" },
   { label: "Finanziamenti", icon: "financing" },
@@ -1502,7 +1504,7 @@ function Sidebar({
       <Logo />
       <nav>
         <p className="nav-title">PANORAMICA</p>
-        {nav.slice(0, 3).map((item) => (
+        {nav.slice(0, 4).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1515,7 +1517,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title menu-group">PIANIFICAZIONE</p>
-        {nav.slice(3, 7).map((item) => (
+        {nav.slice(4, 8).map((item) => (
           <button
             key={item.label}
             className={`nested ${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1530,7 +1532,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">GESTIONE</p>
-        {nav.slice(7, 11).map((item) => (
+        {nav.slice(8, 12).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1543,7 +1545,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">CONDOMINIO</p>
-        {nav.slice(11, 12).map((item) => (
+        {nav.slice(12, 13).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1556,7 +1558,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(12).map((item) => (
+        {nav.slice(13).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -2587,7 +2589,7 @@ function TransactionRow({
 }
 
 const sectionData: Record<
-  Exclude<Section, "Dashboard" | "Transazioni">,
+  Exclude<Section, "Dashboard" | "Transazioni" | "Non contabilizzate">,
   { title: string; intro: string; action: string }
 > = {
   Bilancio: {
@@ -2688,7 +2690,10 @@ function GenericSection({
   duplicateRecurrence,
   refresh,
 }: {
-  section: Exclude<Section, "Dashboard" | "Transazioni">;
+  section: Exclude<
+    Section,
+    "Dashboard" | "Transazioni" | "Non contabilizzate"
+  >;
   onAdd: (kind: ActionKind, defaultAccount?: string, cardId?: string) => void;
   onNewFinancing: () => void;
   onEditFinancing: (item: MoneyFinancing) => void;
@@ -8578,7 +8583,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 13.2.3</h2>
+          <h2>Money Elite versione 13.3</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -11048,6 +11053,73 @@ function TransactionsSection({
             {nonAccountedOnly
               ? `Nessuna transazione non contabilizzata in ${monthLabel(month)}.`
               : `Nessuna transazione trovata in ${monthLabel(month)}.`}
+          </div>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function UnaccountedTransactionsSection({
+  transactions,
+  openTransaction,
+}: {
+  transactions: Transaction[];
+  openTransaction: (t: Transaction) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const filtered = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return transactions.filter((transaction) => {
+      if (transaction.kind === "transfer" || transaction.accounted !== false)
+        return false;
+      const text =
+        `${transaction.label} ${transaction.category} ${transaction.account} ${transaction.notes ?? ""}`.toLowerCase();
+      return !normalizedQuery || text.includes(normalizedQuery);
+    });
+  }, [transactions, query]);
+
+  return (
+    <section className="section-page">
+      <article className="panel full-list compact-transaction-list">
+        <div className="transactions-toolbar">
+          <div className={`compact-search ${searchOpen ? "is-open" : ""}`}>
+            <button
+              aria-label={searchOpen ? "Chiudi ricerca" : "Cerca transazione"}
+              title={searchOpen ? "Chiudi ricerca" : "Cerca transazione"}
+              onClick={() => {
+                setSearchOpen((value) => !value);
+                if (searchOpen) setQuery("");
+              }}
+            >
+              <AppIcon name={searchOpen ? "close" : "search"} size={18} />
+            </button>
+            {searchOpen && (
+              <input
+                autoFocus
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cerca..."
+              />
+            )}
+          </div>
+          <span className="nc-filter active" title="Da contabilizzare">
+            NC
+          </span>
+        </div>
+        {filtered.map((transaction) => (
+          <TransactionRow
+            t={transaction}
+            key={transaction.id}
+            onOpen={openTransaction}
+          />
+        ))}
+        {!filtered.length && (
+          <div className="empty">
+            {query.trim()
+              ? "Nessuna transazione non contabilizzata corrisponde alla ricerca."
+              : "Nessuna transazione da contabilizzare."}
           </div>
         )}
       </article>
@@ -13852,6 +13924,16 @@ export default function Home() {
             />
           ) : active === "Transazioni" ? (
             <TransactionsSection
+              transactions={transactions.filter(
+                (transaction) =>
+                  (!transaction.dueDate || Boolean(transaction.confirmedAt)) &&
+                  (!transaction.cardId ||
+                    transaction.kind === "card_repayment"),
+              )}
+              openTransaction={setSelectedTransaction}
+            />
+          ) : active === "Non contabilizzate" ? (
+            <UnaccountedTransactionsSection
               transactions={transactions.filter(
                 (transaction) =>
                   (!transaction.dueDate || Boolean(transaction.confirmedAt)) &&
