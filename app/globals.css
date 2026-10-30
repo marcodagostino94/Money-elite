@@ -2837,6 +2837,73 @@ header h1 {
   vertical-align: 1px;
 }
 
+.planning-summary-row {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+.planning-summary-row .source-badge {
+  margin-bottom: 6px;
+}
+.condominium-linked-transactions {
+  margin-bottom: 14px;
+  padding: 5px 18px;
+}
+.condominium-linked-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto 34px;
+  gap: 11px;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.condominium-linked-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #7651c6;
+  background: #f0eafe;
+}
+.condominium-linked-row h3,
+.condominium-linked-row p,
+.condominium-linked-row em,
+.condominium-linked-row small {
+  display: block;
+  margin: 0;
+}
+.condominium-linked-row small,
+.condominium-linked-row p,
+.condominium-linked-row em {
+  color: #777;
+  font-size: 9px;
+}
+.condominium-delete-linked {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #efd4d1;
+  border-radius: 8px;
+  color: #b34843;
+  background: #fff7f6;
+}
+@media (max-width: 760px) {
+  .planning-summary-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .condominium-linked-row {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+  }
+  .condominium-linked-row > strong {
+    grid-column: 2;
+  }
+  .condominium-delete-linked {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+
 .pension-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

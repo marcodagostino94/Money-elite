@@ -34,6 +34,7 @@ type Section =
   | "Pianificate"
   | "Abbonamenti"
   | "Finanziamenti"
+  | "Riassunto"
   | "Conti"
   | "Fondo pensione"
   | "Condominio"
@@ -285,6 +286,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Pianificate", icon: "planned" },
   { label: "Abbonamenti", icon: "subscriptions" },
   { label: "Finanziamenti", icon: "financing" },
+  { label: "Riassunto", icon: "list" },
   { label: "Conti", icon: "accounts" },
   { label: "Carte di credito", icon: "card" },
   { label: "Fondo pensione", icon: "pension" },
@@ -1513,7 +1515,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title menu-group">PIANIFICAZIONE</p>
-        {nav.slice(3, 6).map((item) => (
+        {nav.slice(3, 7).map((item) => (
           <button
             key={item.label}
             className={`nested ${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1528,7 +1530,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">GESTIONE</p>
-        {nav.slice(6, 10).map((item) => (
+        {nav.slice(7, 11).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1541,7 +1543,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">CONDOMINIO</p>
-        {nav.slice(10, 11).map((item) => (
+        {nav.slice(11, 12).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -1554,7 +1556,7 @@ function Sidebar({
           </button>
         ))}
         <p className="nav-title">ANALISI</p>
-        {nav.slice(11).map((item) => (
+        {nav.slice(12).map((item) => (
           <button
             key={item.label}
             className={`${active === item.label ? "active" : ""} nav-${item.icon}`}
@@ -2608,6 +2610,11 @@ const sectionData: Record<
     intro: "Rate, importi residui e saldi anticipati.",
     action: "Nuovo finanziamento",
   },
+  Riassunto: {
+    title: "Riassunto pianificazione",
+    intro: "Tutte le spese ricorrenti previste in un unico elenco.",
+    action: "",
+  },
   Conti: {
     title: "I tuoi conti",
     intro: "Saldi e disponibilità aggiornati in un unico posto.",
@@ -2831,6 +2838,17 @@ function GenericSection({
         refresh={refresh}
         onNew={onNewFinancing}
         onEdit={onEditFinancing}
+      />
+    );
+  if (section === "Riassunto")
+    return (
+      <PlanningSummarySection
+        recurrences={recurrences}
+        transactions={transactions}
+        financings={financings}
+        accounts={accounts}
+        cards={cards}
+        categories={categories}
       />
     );
   if (section === "Conti")
@@ -6844,6 +6862,121 @@ function SubscriptionsSection({
   );
 }
 
+function PlanningSummarySection({
+  recurrences,
+  transactions,
+  financings,
+  accounts,
+  cards,
+  categories,
+}: {
+  recurrences: MoneyRecurrence[];
+  transactions: Transaction[];
+  financings: MoneyFinancing[];
+  accounts: MoneyAccount[];
+  cards: MoneyCard[];
+  categories: MoneyCategory[];
+}) {
+  const totals = scheduledExpenseTotals(recurrences, transactions);
+  const financingByRecurrence = new Map(
+    financings.map((item) => [item.recurrenceId, item]),
+  );
+  const items = recurrences
+    .filter((item) => item.active && item.kind === "expense")
+    .sort((a, b) => a.nextDate.localeCompare(b.nextDate));
+  const sourceFor = (item: MoneyRecurrence) =>
+    financingByRecurrence.has(item.id)
+      ? "FINANZIAMENTO"
+      : item.isSubscription
+        ? "ABBONAMENTO"
+        : "PIANIFICATA";
+  const frequencyFor = (item: MoneyRecurrence) => {
+    const interval = Math.max(1, item.intervalCount || 1);
+    if (item.frequency === "daily")
+      return interval === 1 ? "Ogni giorno" : `Ogni ${interval} giorni`;
+    if (item.frequency === "weekly")
+      return interval === 1 ? "Ogni settimana" : `Ogni ${interval} settimane`;
+    if (item.frequency === "yearly")
+      return interval === 1 ? "Ogni anno" : `Ogni ${interval} anni`;
+    return interval === 1 ? "Ogni mese" : `Ogni ${interval} mesi`;
+  };
+  return (
+    <section className="section-page planning-summary-page">
+      <div className="subscription-summary">
+        <div>
+          <small>RIMANENTE QUESTO MESE</small>
+          <strong>{money(totals.monthRemaining)}</strong>
+        </div>
+        <div>
+          <small>RIMANENTE QUEST’ANNO</small>
+          <strong>{money(totals.yearRemaining)}</strong>
+        </div>
+        <div>
+          <small>TOTALE DEL MESE</small>
+          <strong>{money(totals.monthTotal)}</strong>
+        </div>
+      </div>
+      <article className="panel subscription-list planning-summary-list">
+        {items.length ? (
+          items.map((item) => {
+            const financing = financingByRecurrence.get(item.id);
+            const category = categories.find((row) => row.id === item.categoryId);
+            const parent = category?.parentId
+              ? categories.find((row) => row.id === category.parentId)
+              : null;
+            const visual = category
+              ? categoryVisual(category)
+              : { icon: "planned", color: "#607080" };
+            const source = sourceFor(item);
+            const amount =
+              financing?.installmentSchedule[item.occurrenceCount]?.amount ??
+              item.amount;
+            const account =
+              cards.find((row) => row.id === item.cardId)?.name ||
+              accounts.find((row) => row.id === item.accountId)?.name ||
+              "Conto";
+            return (
+              <div className="subscription-row planning-summary-row" key={item.id}>
+                <div
+                  className="subscription-icon"
+                  style={{ color: visual.color, background: `${visual.color}18` }}
+                >
+                  <AppIcon name={visual.icon} />
+                </div>
+                <div className="subscription-body">
+                  <small className={`source-badge ${source.toLowerCase()}`}>
+                    {source}
+                  </small>
+                  <h3>{item.notes || category?.name || "Spesa pianificata"}</h3>
+                  <div className="subscription-dates">
+                    <span>Prossima data</span>
+                    <b>{formatItalianDate(item.nextDate)}</b>
+                    <span>{frequencyFor(item)}</span>
+                  </div>
+                  <div className="progress">
+                    <i
+                      style={{
+                        width: `${recurrenceCycleProgress(item)}%`,
+                        background: visual.color,
+                      }}
+                    />
+                  </div>
+                  <strong>{money(amount)} · {account}</strong>
+                  <small>
+                    {parent ? `${parent.name} › ${category?.name}` : category?.name || "Senza categoria"}
+                  </small>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="empty">Nessuna spesa pianificata attiva.</div>
+        )}
+      </article>
+    </section>
+  );
+}
+
 function BudgetSection({
   budgets,
   categories,
@@ -8445,7 +8578,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 13.1.0</h2>
+          <h2>Money Elite versione 13.2.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8488,8 +8621,8 @@ function InformationSection() {
           <div>
             <h3>Note sulla versione</h3>
             <p>
-              Apertura offline con dati locali e sincronizzazione automatica
-              delle nuove entrate, uscite e dei giroconti semplici.
+              Riassunto completo della pianificazione e consultazione dei
+              movimenti collegati alle rate condominiali.
             </p>
           </div>
         </article>

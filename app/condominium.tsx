@@ -54,9 +54,15 @@ type Installment = {
 };
 
 type LinkedTransaction = {
+  id: string;
   recurrenceId?: string | null;
   confirmedAt?: string | null;
   dateISO?: string;
+  dueDate?: string | null;
+  amount: number;
+  account?: string;
+  category?: string;
+  notes?: string;
 };
 
 type ScheduleDraft = {
@@ -154,6 +160,7 @@ export function CondominiumSection({
     useState<Installment | null>(null);
   const [finalPeriod, setFinalPeriod] = useState<Period | null>(null);
   const [working, setWorking] = useState(false);
+  const [showTransactions, setShowTransactions] = useState(false);
 
   const load = async () => {
     setBusy(true);
@@ -369,9 +376,76 @@ export function CondominiumSection({
     await Promise.all([load(), refreshMoney()]);
   };
 
+  const deleteLinkedTransaction = async (
+    transaction: LinkedTransaction,
+    periodRows: Installment[],
+  ) => {
+    if (!window.confirm("Eliminare questa transazione collegata alla rata?"))
+      return;
+    setWorking(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const installment = periodRows.find(
+        (item) => item.recurrenceId === transaction.recurrenceId,
+      );
+      const { error } = await supabase
+        .from("transactions")
+        .delete()
+        .eq("id", transaction.id);
+      if (error) throw error;
+      const hasAnotherConfirmed = transactions.some(
+        (item) =>
+          item.id !== transaction.id &&
+          item.recurrenceId === transaction.recurrenceId &&
+          Boolean(item.confirmedAt),
+      );
+      if (installment && transaction.confirmedAt && !hasAnotherConfirmed) {
+        const { error: installmentError } = await supabase
+          .from("condominium_installments")
+          .update({ paid_at: null })
+          .eq("id", installment.id);
+        if (installmentError) throw installmentError;
+        if (installment.recurrenceId) {
+          const { error: recurrenceError } = await supabase
+            .from("recurrences")
+            .update({
+              active: true,
+              occurrence_count: 0,
+              next_date: installment.dueDate,
+            })
+            .eq("id", installment.recurrenceId);
+          if (recurrenceError) throw recurrenceError;
+        }
+      }
+      await Promise.all([load(), refreshMoney()]);
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Impossibile eliminare la transazione.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const selected = periods.find((period) => period.id === selectedId) || null;
   if (selected) {
     const periodRows = rowsFor(selected.id);
+    const periodRecurrenceIds = new Set(
+      periodRows
+        .map((item) => item.recurrenceId)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const linkedTransactions = transactions
+      .filter(
+        (transaction) =>
+          Boolean(
+            transaction.recurrenceId &&
+              periodRecurrenceIds.has(transaction.recurrenceId),
+          ),
+      )
+      .sort((a, b) => (b.dateISO || "").localeCompare(a.dateISO || ""));
     const paid = paidFor(selected.id);
     const balance = periodBalance(selected);
     const previous = previousFor(selected.managementType, selected);
@@ -379,7 +453,12 @@ export function CondominiumSection({
     return (
       <section className="section-page condominium-page">
         <div className="inner-page-header condominium-detail-header">
-          <button onClick={() => setSelectedId(null)}>
+          <button
+            onClick={() => {
+              setShowTransactions(false);
+              setSelectedId(null);
+            }}
+          >
             <ArrowLeft size={19} />
           </button>
           <div>
@@ -487,7 +566,68 @@ export function CondominiumSection({
               <Plus size={15} /> Salda consuntivo {previous.label}
             </button>
           )}
+          <button
+            className={`outline ${showTransactions ? "active" : ""}`}
+            onClick={() => setShowTransactions((value) => !value)}
+          >
+            <ReceiptText size={15} />
+            {showTransactions ? "Nascondi transazioni" : "Mostra transazioni"}
+          </button>
         </div>
+        {showTransactions && (
+          <article className="panel condominium-linked-transactions">
+            <div className="condominium-list-title">
+              <div>
+                <small>MOVIMENTI COLLEGATI</small>
+                <h3>Transazioni delle rate</h3>
+              </div>
+              <span>{linkedTransactions.length} transazioni</span>
+            </div>
+            {linkedTransactions.length ? (
+              linkedTransactions.map((transaction) => {
+                const installment = periodRows.find(
+                  (item) => item.recurrenceId === transaction.recurrenceId,
+                );
+                return (
+                  <div className="condominium-linked-row" key={transaction.id}>
+                    <div className="condominium-linked-icon">
+                      <ReceiptText size={17} />
+                    </div>
+                    <div>
+                      <small>
+                        {transaction.confirmedAt
+                          ? "TRANSAZIONE CONFERMATA"
+                          : "IN ATTESA DI CONFERMA"}
+                      </small>
+                      <h3>{installment?.description || "Rata condominiale"}</h3>
+                      <p>
+                        {transaction.dateISO
+                          ? formatItalianDate(transaction.dateISO)
+                          : "Data non disponibile"}
+                        {transaction.account ? ` · ${transaction.account}` : ""}
+                      </p>
+                      {transaction.notes && <em>{transaction.notes}</em>}
+                    </div>
+                    <strong>{money(Math.abs(transaction.amount))}</strong>
+                    <button
+                      className="condominium-delete-linked"
+                      aria-label="Elimina transazione collegata"
+                      onClick={() =>
+                        void deleteLinkedTransaction(transaction, periodRows)
+                      }
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="empty">
+                Nessuna transazione collegata alle rate di questa gestione.
+              </div>
+            )}
+          </article>
+        )}
         <article className="panel condominium-installments">
           <div className="condominium-list-title">
             <div>
