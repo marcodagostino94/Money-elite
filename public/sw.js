@@ -1,4 +1,4 @@
-const CACHE = "money-elite-v13";
+const CACHE = "money-elite-v14";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

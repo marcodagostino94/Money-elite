@@ -1,6 +1,6 @@
 {
   "name": "money-elite",
-  "version": "13.3.0",
+  "version": "14.0.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "node --test tests/planning.test.mjs && npm run build",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

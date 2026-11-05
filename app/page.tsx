@@ -14,6 +14,7 @@ import {
   type OfflineTransactionPayload,
 } from "@/lib/offline";
 import { CondominiumSection } from "./condominium";
+import { TfrHistory } from "./tfr-history";
 import {
   formatItalianDate,
   loadMoneyData,
@@ -37,7 +38,7 @@ type Section =
   | "Finanziamenti"
   | "Riassunto"
   | "Conti"
-  | "Fondo pensione"
+  | "TFR e Fondo"
   | "Condominio"
   | "Carte di credito"
   | "Budget"
@@ -291,7 +292,7 @@ const nav: { label: Section; icon: string }[] = [
   { label: "Riassunto", icon: "list" },
   { label: "Conti", icon: "accounts" },
   { label: "Carte di credito", icon: "card" },
-  { label: "Fondo pensione", icon: "pension" },
+  { label: "TFR e Fondo", icon: "pension" },
   { label: "Budget", icon: "budget" },
   { label: "Condominio", icon: "building" },
   { label: "Report", icon: "report" },
@@ -2622,8 +2623,8 @@ const sectionData: Record<
     intro: "Saldi e disponibilità aggiornati in un unico posto.",
     action: "Aggiungi conto",
   },
-  "Fondo pensione": {
-    title: "Fondo pensione",
+  "TFR e Fondo": {
+    title: "TFR e Fondo",
     intro: "TFR e contributi maturati, versati e ancora da incassare.",
     action: "Nuova mensilità",
   },
@@ -2870,7 +2871,7 @@ function GenericSection({
         openTransaction={openTransaction}
       />
     );
-  if (section === "Fondo pensione") return <PensionFundSection />;
+  if (section === "TFR e Fondo") return <PensionFundSection />;
   if (section === "Condominio")
     return (
       <CondominiumSection
@@ -8583,7 +8584,7 @@ function InformationSection() {
         <img src={assetPath("/money-elite-icon.png")} alt="Money Elite" />
         <div>
           <small>VERSIONE ATTUALE</small>
-          <h2>Money Elite versione 13.3</h2>
+          <h2>Money Elite versione 14.0</h2>
           <p>
             Gestione personale di conti, transazioni, pianificate, abbonamenti,
             finanziamenti, carte e budget.
@@ -8992,6 +8993,7 @@ function PensionFundSection() {
           ＋ Nuova mensilità
         </button>
       </div>
+      {!busy && <TfrHistory entries={entries} transfers={companyTransfers} />}
       <article className="panel pension-list">
         {busy ? (
           <div className="empty">Caricamento…</div>
@@ -9190,7 +9192,7 @@ function PensionFundSection() {
           >
             <div className="modal-title">
               <div>
-                <small>FONDO PENSIONE</small>
+                <small>TFR E FONDO</small>
                 <h2>
                   {editing === "new" ? "Nuova mensilità" : "Modifica mensilità"}
                 </h2>
@@ -9364,7 +9366,7 @@ function PensionFundSection() {
           >
             <div className="modal-title">
               <div>
-                <small>FONDO PENSIONE</small>
+                <small>TFR E FONDO</small>
                 <h2>Aggiungi versamento</h2>
               </div>
               <button type="button" onClick={() => setAddingPayment(false)}>

@@ -3209,6 +3209,56 @@ header h1 {
 }
 
 /* Condominio */
+.condominium-area.extraordinary .condominium-area-icon { color: #37776b; background: #e8f4ef; }
+.condominium-revisions { padding: 18px; }
+.condominium-revisions summary { cursor: pointer; font-weight: 700; }
+.condominium-revisions > div { padding: 12px 0; border-top: 1px solid var(--line); margin-top: 10px; }
+.condominium-revisions > div > span { display: inline-block; margin-right: 16px; color: var(--muted); }
+.migration-notice { padding: 16px; color: #955a22; background: #fff8eb; }
+.tfr-history { padding: 20px; margin-bottom: 18px; }
+.tfr-history-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.tfr-history-heading h3 { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.tfr-history-heading small { color: #777; font-size: 10px; letter-spacing: .6px; }
+.tfr-history-heading button { display: inline-flex; align-items: center; gap: 6px; }
+.tfr-history-table { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 16px; }
+.tfr-history-table table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tfr-history-table th, .tfr-history-table td { text-align: left; padding: 14px 10px; border-bottom: 1px solid var(--line); }
+.tfr-history-table thead th { font-size: 11px; color: #777; font-weight: 600; }
+.tfr-history-table tbody th { font-size: 12px; }
+.tfr-history-table tbody td { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.tfr-history-table small { display: block; font-size: 10px; font-weight: 400; color: #777; }
+.revision-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 14px 0; }
+.revision-totals > div { padding: 12px; border-radius: 10px; background: #f5f3f8; }
+.revision-totals small, .revision-totals strong { display: block; }
+.revision-totals small { font-size: 11px; color: #686570; }
+.revision-totals strong { margin-top: 5px; font-size: 19px; font-variant-numeric: tabular-nums; }
+.revision-options { padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin: 14px 0; }
+.revision-options legend { padding: 0 6px; font-size: 12px; }
+.budget-revision-modal .revision-options label, .revision-warning label, .revision-review-list label { display: flex; align-items: flex-start; gap: 9px; font-size: 12px; }
+.budget-revision-modal input[type="checkbox"], .budget-revision-modal input[type="radio"] { width: 18px; height: 18px; min-width: 18px; margin: 0; }
+.revision-review-list { max-height: 230px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.revision-review-list > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--line); }
+.revision-review-list > div > strong { white-space: nowrap; font-size: 15px; }
+.revision-review-list small { display: block; margin-top: 4px; color: #777; font-size: 11px; }
+.revision-warning { background: #fff7eb; color: #86531f; padding: 14px; border-radius: 10px; margin: 14px 0; }
+.budget-revision-modal h3 { font-size: 14px; margin: 18px 0 8px; }
+.budget-revision-modal, .tfr-history .modal { max-height: 90dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.budget-revision-modal .condominium-schedule-row > input[inputmode="decimal"] { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+@media(max-width: 600px) {
+  .tfr-history { padding: 14px; }
+  .tfr-history-table th, .tfr-history-table td { padding: 12px 6px; }
+  .tfr-history-table thead th { font-size: 10px; }
+  .tfr-history-table tbody th { font-size: 11px; }
+  .tfr-history-table tbody td { font-size: 14px; }
+  .revision-totals strong { font-size: 17px; }
+  .budget-revision-modal .modal-actions { position: sticky; bottom: -20px; background: var(--panel, #fff); padding: 12px 0; }
+  .budget-revision-modal .condominium-schedule-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .budget-revision-modal .condominium-schedule-row > input:not([type="checkbox"]) { grid-column: 2; }
+  .budget-revision-modal .condominium-schedule-row > input[type="checkbox"] { min-height: 18px; }
+  .budget-revision-modal .condominium-schedule-row small { font-size: 11px; }
+  .budget-revision-modal .revision-review-list { max-height: none; overflow: visible; }
+  .budget-revision-modal .modal-actions button { flex: 1; min-width: 0; white-space: normal; }
+}
 .condominium-areas {
   display: grid;
   gap: 18px;

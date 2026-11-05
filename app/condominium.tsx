@@ -6,6 +6,7 @@ import {
   Building2,
   Check,
   Flame,
+  HardHat,
   Pencil,
   Plus,
   ReceiptText,
@@ -19,16 +20,20 @@ import {
   type MoneyAccount,
   type MoneyCategory,
 } from "@/lib/money/data";
+import { monthlyDates } from "@/lib/money/planning";
+import { BudgetRevisionModal, type BudgetRevisionDraft } from "./condominium-revision";
 
-type ManagementType = "ordinary" | "heating";
+type ManagementType = "ordinary" | "heating" | "extraordinary";
+const managementLabel = (type: ManagementType) => type === "ordinary" ? "Gestione ordinaria" : type === "heating" ? "Gestione riscaldamento" : "Gestione straordinaria";
 type InstallmentKind = "regular" | "extraordinary" | "settlement";
 
 type Period = {
   id: string;
   managementType: ManagementType;
   label: string;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
+  updatedAt: string;
   budgetAmount: number;
   finalAmount: number | null;
   closingBalance: number;
@@ -45,6 +50,7 @@ type Installment = {
   description: string;
   amount: number;
   originalAmount: number;
+  creditApplied: number;
   dueDate: string;
   accountId: string | null;
   categoryId: string | null;
@@ -164,6 +170,9 @@ export function CondominiumSection({
   const [finalPeriod, setFinalPeriod] = useState<Period | null>(null);
   const [working, setWorking] = useState(false);
   const [showTransactions, setShowTransactions] = useState(false);
+  const [revising, setRevising] = useState(false);
+  const [revisions, setRevisions] = useState<{ id: string; periodId: string; oldAmount: number; newAmount: number; createdAt: string; note: string }[]>([]);
+  const [revisionError, setRevisionError] = useState("");
   const [storedLinkedTransactions, setStoredLinkedTransactions] = useState<
     LinkedTransaction[]
   >([]);
@@ -175,7 +184,8 @@ export function CondominiumSection({
       supabase
         .from("condominium_periods")
         .select("*")
-        .order("start_date", { ascending: false }),
+        .order("start_date", { ascending: false })
+        .order("created_at", { ascending: false }),
       supabase
         .from("condominium_installments")
         .select("*")
@@ -194,6 +204,7 @@ export function CondominiumSection({
         label: row.label,
         startDate: row.start_date,
         endDate: row.end_date,
+        updatedAt: row.updated_at,
         budgetAmount: Number(row.budget_amount || 0),
         finalAmount: row.final_amount == null ? null : Number(row.final_amount),
         closingBalance: Number(row.closing_balance || 0),
@@ -212,6 +223,7 @@ export function CondominiumSection({
         description: row.description,
         amount: Number(row.amount),
         originalAmount: Number(row.original_amount ?? row.amount),
+        creditApplied: Number(row.credit_applied || 0),
         dueDate: row.due_date,
         accountId: row.account_id,
         categoryId: row.category_id,
@@ -220,6 +232,9 @@ export function CondominiumSection({
         notes: row.notes || "",
       }));
     setInstallments(loadedInstallments);
+    const history = await supabase.from("condominium_budget_revisions").select("*").order("created_at", { ascending: false });
+    setRevisionError(history.error ? "Per le nuove funzioni esegui SQL_AGGIORNAMENTO_V14.sql nel progetto Supabase." : "");
+    setRevisions((history.data || []).map(row => ({ id: row.id, periodId: row.period_id, oldAmount: Number(row.old_amount), newAmount: Number(row.new_amount), createdAt: row.created_at, note: row.note || "" })));
     const recurrenceIds = loadedInstallments
       .map((item) => item.recurrenceId)
       .filter((id): id is string => Boolean(id));
@@ -352,15 +367,15 @@ export function CondominiumSection({
   const byType = (type: ManagementType) =>
     periods.filter((period) => period.managementType === type);
   const currentFor = (type: ManagementType) =>
-    byType(type).find((period) => !period.placeholder) || null;
+    byType(type).find((period) => !period.placeholder && (type !== "extraordinary" || period.status === "active")) || null;
   const previousFor = (type: ManagementType, current?: Period | null) =>
-    byType(type).find((period) => period.id !== current?.id) || null;
+    type === "extraordinary" ? null : byType(type).find((period) => period.id !== current?.id) || null;
 
   const categoryFor = (type: ManagementType) => {
     const casa = categories.find(
       (item) => !item.parentId && item.name.toLocaleLowerCase("it") === "casa",
     );
-    const wanted = type === "ordinary" ? "condominio" : "riscaldamento";
+    const wanted = type === "heating" ? "riscaldamento" : "condominio";
     return categories.find(
       (item) =>
         item.parentId === casa?.id &&
@@ -380,7 +395,7 @@ export function CondominiumSection({
     const category = categoryFor(type);
     if (!category)
       throw new Error(
-        `Categoria Casa › ${type === "ordinary" ? "Condominio" : "Riscaldamento"} non trovata.`,
+        `Categoria Casa › ${type === "heating" ? "Riscaldamento" : "Condominio"} non trovata.`,
       );
     const { data, error } = await supabase
       .from("recurrences")
@@ -543,6 +558,34 @@ export function CondominiumSection({
     const balance = periodBalance(selected);
     const previous = previousFor(selected.managementType, selected);
     const previousBalance = previous ? periodBalance(previous) : 0;
+    const readOnly = selected.managementType === "extraordinary" && selected.status === "archived";
+    const saveRevision = async (draft: BudgetRevisionDraft) => {
+      setWorking(true);
+      try {
+        const { error } = await getSupabaseBrowserClient().rpc("revise_condominium_budget", {
+          p_period: selected.id, p_expected_updated_at: selected.updatedAt,
+          p_budget: draft.budget, p_replace_unpaid: draft.replaceUnpaid,
+          p_schedule: draft.schedule, p_note: draft.note, p_request_id: draft.requestId,
+        });
+        if (error) throw error;
+        setRevising(false);
+        await Promise.all([load(), refreshMoney()]);
+        return true;
+      } catch (e) {
+        alert(e instanceof Error ? e.message : (e as { message?: string }).message || "Impossibile aggiornare il preventivo. Nessuna modifica salvata.");
+        return false;
+      } finally { setWorking(false); }
+    };
+    const toggleClosed = async () => {
+      if (!window.confirm(readOnly ? "Riaprire questa gestione per apportare correzioni?" : "Terminare e archiviare la gestione? Lo storico sarà conservato. Tutte le rate devono risultare pagate e l'eventuale consuntivo in pareggio.")) return;
+      setWorking(true);
+      try {
+        const { error } = await getSupabaseBrowserClient().rpc("set_condominium_management_closed", { p_period: selected.id, p_close: !readOnly, p_expected_updated_at: selected.updatedAt });
+        if (error) throw error;
+        await load();
+      } catch (e) { alert((e as { message?: string }).message || "Impossibile cambiare lo stato della gestione."); }
+      finally { setWorking(false); }
+    };
     return (
       <section className="section-page condominium-page">
         <div className="inner-page-header condominium-detail-header">
@@ -556,15 +599,18 @@ export function CondominiumSection({
           </button>
           <div>
             <small>
-              {selected.managementType === "ordinary"
-                ? "GESTIONE ORDINARIA"
-                : "GESTIONE RISCALDAMENTO"}
+              {managementLabel(selected.managementType).toLocaleUpperCase("it")}
             </small>
             <h2>{selected.label}</h2>
             <p>
-              {formatItalianDate(selected.startDate)} –{" "}
-              {formatItalianDate(selected.endDate)}
+              {selected.managementType === "extraordinary" ? (readOnly ? "Gestione chiusa e archiviata" : "In corso · nessuna scadenza annuale") : `${formatItalianDate(selected.startDate!)} – ${formatItalianDate(selected.endDate!)}`}
             </p>
+            {selected.managementType === "extraordinary" && !readOnly && <button className="outline" disabled={working} onClick={async () => {
+              const name = window.prompt("Nome della gestione", selected.label)?.trim();
+              if (!name || name === selected.label) return;
+              const { error } = await getSupabaseBrowserClient().from("condominium_periods").update({ label: name }).eq("id", selected.id);
+              if (error) alert(error.message); else await load();
+            }}><Pencil size={13} /> Rinomina</button>}
           </div>
           <button
             className="danger-outline"
@@ -573,11 +619,13 @@ export function CondominiumSection({
             <Trash2 size={15} /> Elimina
           </button>
         </div>
+        {revisionError && <p className="panel migration-notice" role="alert">{revisionError}</p>}
         <div className="condominium-summary">
           <div>
             <small>PREVENTIVO</small>
             <strong>{money(selected.budgetAmount)}</strong>
             <button
+              disabled={readOnly || working}
               onClick={async () => {
                 const value = window.prompt(
                   "Nuovo importo del preventivo",
@@ -626,15 +674,18 @@ export function CondominiumSection({
           </div>
         </div>
         <div className="condominium-toolbar">
+          <button className="outline" disabled={readOnly || working || Boolean(revisionError)} onClick={() => setRevising(true)}><Pencil size={15} /> Aggiorna preventivo e rate</button>
+          {selected.managementType === "extraordinary" && <button className="outline" disabled={working || Boolean(revisionError)} onClick={() => void toggleClosed()}><Check size={15} /> {readOnly ? "Riapri gestione" : "Termina e chiudi gestione"}</button>}
           <button
             className="outline"
+            disabled={readOnly || working}
             onClick={() =>
               setExtraMode({ period: selected, kind: "extraordinary" })
             }
           >
             <Plus size={15} /> Rata straordinaria
           </button>
-          <button className="outline" onClick={() => setFinalPeriod(selected)}>
+          <button className="outline" disabled={readOnly || working} onClick={() => setFinalPeriod(selected)}>
             {selected.finalAmount == null ? (
               <>
                 <ReceiptText size={15} /> Aggiungi consuntivo
@@ -667,6 +718,11 @@ export function CondominiumSection({
             {showTransactions ? "Nascondi transazioni" : "Mostra transazioni"}
           </button>
         </div>
+        {revisions.some(r => r.periodId === selected.id) && <details className="panel condominium-revisions"><summary>Storico aggiornamenti del preventivo</summary>{revisions.filter(r => r.periodId === selected.id).map(r => <div key={r.id}><span>{new Date(r.createdAt).toLocaleDateString("it-IT")}</span><strong>{money(r.oldAmount)} → {money(r.newAmount)}</strong>{r.note && <p>{r.note}</p>}</div>)}</details>}
+        {(() => {
+          const covered = periodRows.filter(r => r.kind === "regular").reduce((sum, r) => sum + (isPaid(r) ? r.amount : 0) + r.creditApplied, 0);
+          return covered > selected.budgetAmount + .005 ? <p className="panel positive">Anticipo/credito oltre il preventivo: {money(covered - selected.budgetAmount)}. Da verificare con il consuntivo; nessun rimborso automatico.</p> : null;
+        })()}
         {showTransactions && (
           <article className="panel condominium-linked-transactions">
             <div className="condominium-list-title">
@@ -709,6 +765,7 @@ export function CondominiumSection({
                     <strong>{money(Math.abs(transaction.amount))}</strong>
                     <button
                       className="condominium-delete-linked"
+                      disabled={readOnly || working}
                       aria-label="Elimina transazione collegata"
                       onClick={() =>
                         void deleteLinkedTransaction(transaction, periodRows)
@@ -787,19 +844,21 @@ export function CondominiumSection({
                   </div>
                   <strong>{money(item.amount)}</strong>
                   <div className="condominium-row-actions">
-                    {!paidItem && !item.recurrenceId && (
+                    {!readOnly && !paidItem && !item.recurrenceId && (
                       <button onClick={() => void markPaid(item)}>
                         Segna pagata
                       </button>
                     )}
                     <button
                       aria-label="Modifica rata"
+                      disabled={readOnly || working}
                       onClick={() => setEditingInstallment(item)}
                     >
                       <Pencil size={15} />
                     </button>
                     <button
                       aria-label="Elimina rata"
+                      disabled={readOnly || working}
                       onClick={() => void deleteInstallment(item)}
                     >
                       <Trash2 size={15} />
@@ -819,6 +878,7 @@ export function CondominiumSection({
               <h3>{money(selected.finalAmount)}</h3>
               <button
                 className="condominium-edit-final"
+                disabled={readOnly || working}
                 onClick={() => setFinalPeriod(selected)}
               >
                 <Pencil size={12} /> Modifica consuntivo
@@ -832,11 +892,19 @@ export function CondominiumSection({
                   ? "Ancora da pagare"
                   : balance < 0
                     ? "Credito a tuo favore"
-                    : "Gestione chiusa"}
+                    : selected.managementType === "extraordinary" && !readOnly ? "Saldo in pareggio" : "Gestione chiusa"}
               </span>
             </div>
           </article>
         )}
+        {revising && <BudgetRevisionModal
+          period={selected}
+          rows={periodRows.map(row => ({ ...row, paid: isPaid(row), pendingTransaction: Boolean(row.recurrenceId) && availableTransactions.some(t => t.recurrenceId === row.recurrenceId && !t.confirmedAt) }))}
+          accounts={accounts}
+          defaultCategoryId={categoryFor(selected.managementType)?.id || null}
+          onClose={() => !working && setRevising(false)}
+          onSave={saveRevision}
+        />}
         {extraMode && (
           <InstallmentModal
             mode={extraMode}
@@ -959,7 +1027,7 @@ export function CondominiumSection({
               if (error) return alert(error.message);
               setFinalPeriod(null);
               await load();
-              if (wasNew) {
+              if (wasNew && managementType !== "extraordinary") {
                 setSelectedId(null);
                 setNewType(managementType);
               }
@@ -993,19 +1061,17 @@ export function CondominiumSection({
       <article className={`panel condominium-area ${type}`}>
         <div className="condominium-area-heading">
           <div className="condominium-area-icon">
-            {type === "ordinary" ? <Building2 /> : <Flame />}
+            {type === "ordinary" ? <Building2 /> : type === "heating" ? <Flame /> : <HardHat />}
           </div>
           <div>
             <small>
-              {type === "ordinary" ? "GENNAIO – DICEMBRE" : "NOVEMBRE – GIUGNO"}
+              {type === "ordinary" ? "GENNAIO – DICEMBRE" : type === "heating" ? "NOVEMBRE – GIUGNO" : "LAVORI · CHIUSURA MANUALE"}
             </small>
             <h2>
-              {type === "ordinary"
-                ? "Gestione ordinaria"
-                : "Gestione riscaldamento"}
+              {managementLabel(type)}
             </h2>
           </div>
-          <button className="primary" onClick={() => setNewType(type)}>
+          <button className="primary" disabled={type === "extraordinary" && (Boolean(current) || Boolean(revisionError))} onClick={() => setNewType(type)} title={type === "extraordinary" && current ? "Chiudi la gestione in corso prima di aprirne una nuova" : undefined}>
             <Plus size={15} /> Nuovo preventivo
           </button>
         </div>
@@ -1019,10 +1085,10 @@ export function CondominiumSection({
                   : ""
             }
           >
-            <small>SALDO CONSUNTIVO {previous?.label || "PRECEDENTE"}</small>
-            <strong>{money(Math.abs(previousBalance))}</strong>
+            <small>{type === "extraordinary" ? "STATO GESTIONE" : `SALDO CONSUNTIVO ${previous?.label || "PRECEDENTE"}`}</small>
+            <strong>{type === "extraordinary" ? (current ? "In corso" : "Nessuna aperta") : money(Math.abs(previousBalance))}</strong>
             <span>
-              {previousBalance > 0
+              {type === "extraordinary" ? "Senza vincolo annuale" : previousBalance > 0
                 ? "Da pagare"
                 : previousBalance < 0
                   ? "A credito"
@@ -1054,10 +1120,10 @@ export function CondominiumSection({
                 <b>{period.label}</b>
                 <em
                   className={
-                    isCurrent ? "current" : balance === 0 ? "closed" : "open"
+                    isCurrent ? "current" : (type === "extraordinary" ? period.status === "archived" : balance === 0) ? "closed" : "open"
                   }
                 >
-                  {isCurrent ? "In corso" : balance === 0 ? "Chiusa" : "Aperta"}
+                  {isCurrent ? "In corso" : (type === "extraordinary" ? period.status === "archived" : balance === 0) ? "Chiusa" : "Aperta"}
                 </em>
               </button>
             );
@@ -1078,19 +1144,22 @@ export function CondominiumSection({
         <div className="condominium-areas">
           {renderArea("ordinary")}
           {renderArea("heating")}
+          {renderArea("extraordinary")}
+          {revisionError && <p className="panel migration-notice" role="alert">{revisionError}</p>}
         </div>
       )}
       {newType && (
         <NewPeriodModal
           type={newType}
           accounts={accounts}
-          hasHistory={byType(newType).length > 0}
-          previous={currentFor(newType)}
+          hasHistory={newType === "extraordinary" || byType(newType).length > 0}
+          previous={newType === "extraordinary" ? null : currentFor(newType)}
           previousBalance={
-            currentFor(newType) ? periodBalance(currentFor(newType)!) : 0
+            newType !== "extraordinary" && currentFor(newType) ? periodBalance(currentFor(newType)!) : 0
           }
           onClose={() => setNewType(null)}
           onSave={async (draft) => {
+            if (working) return;
             setWorking(true);
             const supabase = getSupabaseBrowserClient();
             let createdPeriodId: string | null = null;
@@ -1102,6 +1171,17 @@ export function CondominiumSection({
                 data: { user },
               } = await supabase.auth.getUser();
               if (!user) return;
+              if (newType === "extraordinary") {
+                const { data: id, error } = await supabase.rpc("create_condominium_extra", {
+                  p_label: draft.name!.trim(), p_budget: draft.budgetAmount, p_request_id: draft.requestId,
+                  p_schedule: draft.schedule.map(row => ({ description: row.description, amount: row.amount, due_date: row.date, account_id: draft.accountId, category_id: categoryFor(newType)?.id || null, create_planned: row.createPlanned && row.amount > 0 })),
+                });
+                if (error) throw error;
+                setNewType(null);
+                await Promise.all([load(), refreshMoney()]);
+                setSelectedId(id);
+                return;
+              }
               let carry = draft.openingBalance;
               if (!byType(newType).length && carry !== 0) {
                 const previousYear = draft.year - 1;
@@ -1296,6 +1376,8 @@ function NewPeriodModal({
   onClose: () => void;
   onSave: (draft: {
     year: number;
+    name?: string;
+    requestId: string;
     budgetAmount: number;
     accountId: string;
     openingBalance: number;
@@ -1319,8 +1401,11 @@ function NewPeriodModal({
       : now.getMonth() >= 6
         ? now.getFullYear()
         : now.getFullYear() - 1;
-  const defaultCount = type === "ordinary" ? 4 : 5;
+  const defaultCount = type === "heating" ? 5 : 4;
   const [year, setYear] = useState(defaultYear);
+  const [requestId] = useState(() => crypto.randomUUID());
+  const [name, setName] = useState("");
+  const [firstDate, setFirstDate] = useState(toIsoDate(new Date()));
   const [amountText, setAmountText] = useState("");
   const [countText, setCountText] = useState(String(defaultCount));
   const [accountId, setAccountId] = useState(
@@ -1340,8 +1425,10 @@ function NewPeriodModal({
   const count = Math.max(1, Number(countText) || 1);
 
   const calculate = () => {
+    if (!Number.isInteger(count) || count < 1 || count > 120 || !Number.isFinite(amount) || amount <= 0) return alert("Inserisci un importo valido e un numero di rate da 1 a 120.");
+    if (type === "extraordinary" && !firstDate) return alert("Scegli la prima scadenza.");
     const values = splitAmount(amount, Math.max(1, count));
-    const dates = standardDates(type, year, Math.max(1, count));
+    const dates = type === "extraordinary" ? monthlyDates(firstDate, count) : standardDates(type, year, Math.max(1, count));
     setSchedule(
       values.map((value, index) => ({
         description: `Rata ${index + 1}`,
@@ -1388,6 +1475,7 @@ function NewPeriodModal({
         onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
+          if (type === "extraordinary" && !name.trim()) return alert("Inserisci il nome della gestione straordinaria.");
           if (!schedule.length)
             return alert("Premi Calcola per generare le rate.");
           const scheduleTotal = schedule.reduce(
@@ -1404,6 +1492,8 @@ function NewPeriodModal({
           }
           void onSave({
             year,
+            requestId,
+            name: type === "extraordinary" ? name.trim() : undefined,
             budgetAmount: amount,
             accountId,
             openingBalance: effectiveCarry,
@@ -1422,7 +1512,7 @@ function NewPeriodModal({
             <small>CONDOMINIO</small>
             <h2>
               Nuovo preventivo ·{" "}
-              {type === "ordinary" ? "Ordinaria" : "Riscaldamento"}
+              {type === "ordinary" ? "Ordinaria" : type === "heating" ? "Riscaldamento" : "Straordinaria"}
             </h2>
           </div>
           <button type="button" onClick={onClose}>
@@ -1430,7 +1520,10 @@ function NewPeriodModal({
           </button>
         </div>
         <div className="condominium-form-grid">
-          <label>
+          {type === "extraordinary" ? <>
+            <label>Nome gestione<input value={name} onChange={e => setName(e.target.value)} required maxLength={160} placeholder="Es. Rifacimento facciata" /></label>
+            <label>Scadenza prima rata<input type="date" required value={firstDate} onChange={e => setFirstDate(e.target.value)} /></label>
+          </> : <label>
             {type === "ordinary" ? "Anno" : "Anno iniziale della stagione"}
             <input
               type="number"
@@ -1439,7 +1532,7 @@ function NewPeriodModal({
               min="2000"
               max="2100"
             />
-          </label>
+          </label>}
           <label>
             Preventivo per il tuo appartamento
             <input
@@ -1454,7 +1547,7 @@ function NewPeriodModal({
             <input
               type="number"
               min="1"
-              max="24"
+              max={type === "extraordinary" ? "120" : "24"}
               value={countText}
               onChange={(event) => setCountText(event.target.value)}
             />
