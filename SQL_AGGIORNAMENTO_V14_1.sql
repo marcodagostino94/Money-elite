@@ -1,4 +1,4 @@
--- Money Elite 14.0 — aggiornamento dalla 13.3. Eseguire nel SQL Editor di Supabase.
+-- Money Elite 14.1 — aggiornamento cumulativo dalla 13.3 o 14.0.
 -- Fare prima un backup. Non elimina movimenti o dati esistenti.
 -- Script ripetibile; nessuna modifica alle policy delle tabelle preesistenti.
 begin;
@@ -12,8 +12,26 @@ alter table public.condominium_periods drop constraint if exists condominium_per
 alter table public.condominium_periods add constraint condominium_periods_dates_v14_check
   check ((management_type = 'extraordinary' and start_date is null and end_date is null)
     or (management_type <> 'extraordinary' and start_date is not null and end_date is not null));
-create unique index if not exists condominium_one_active_extra_v14
-  on public.condominium_periods(user_id) where management_type = 'extraordinary' and status = 'active';
+drop index if exists public.condominium_one_active_extra_v14;
+alter table public.condominium_periods add column if not exists manually_closed boolean not null default false;
+alter table public.condominium_periods add column if not exists credit_carried_amount numeric(14,2) not null default 0 check (credit_carried_amount >= 0);
+
+create table if not exists public.pension_tfr_annual_confirmations (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  closing_year integer not null check (closing_year between 1900 and 2199),
+  company_amount numeric(14,2) not null check (company_amount >= 0),
+  fund_amount numeric(14,2) not null check (fund_amount >= 0),
+  calculated_company numeric(14,2) not null,
+  calculated_fund numeric(14,2) not null,
+  confirmed_at timestamptz not null default now(),
+  primary key(user_id, closing_year)
+);
+alter table public.pension_tfr_annual_confirmations enable row level security;
+drop policy if exists pension_tfr_annual_owner on public.pension_tfr_annual_confirmations;
+create policy pension_tfr_annual_owner on public.pension_tfr_annual_confirmations for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+revoke all on public.pension_tfr_annual_confirmations from anon;
+grant select,insert,update,delete on public.pension_tfr_annual_confirmations to authenticated;
 
 create table if not exists public.pension_tfr_history_base (
   user_id uuid primary key references auth.users(id) on delete cascade,
@@ -135,7 +153,7 @@ begin
     new_recurrence := null;
     if (draft->>'create_planned')::boolean and row_amount > 0 then
       insert into public.recurrences(user_id, account_id, category_id, kind, amount, frequency, interval_count, occurrence_limit, occurrence_count, next_date, automatic_accounting, is_subscription, active, notes)
-      values(owner_id, row_account, row_category, 'expense', row_amount, 'monthly', 1, 1, 0, row_date, false, false, true, row_description)
+      values(owner_id, row_account, row_category, 'expense', row_amount, 'monthly', 1, 1, 0, row_date, false, false, true, row_description || ' · ' || case current_period.management_type when 'ordinary' then 'Ordinaria ' when 'heating' then 'Riscaldamento ' else '' end || current_period.label)
       returning id into new_recurrence;
     end if;
     insert into public.condominium_installments(user_id, period_id, kind, description, amount, original_amount, credit_applied, due_date, account_id, category_id, planned_recurrence_id)
@@ -158,7 +176,6 @@ begin
   if owner_id is null then raise exception 'Utente non autenticato'; end if;
   if p_request_id is null or nullif(trim(p_label),'') is null then raise exception 'Nome della gestione mancante'; end if;
   if exists(select 1 from public.condominium_periods where id = p_request_id and user_id = owner_id and management_type = 'extraordinary') then return p_request_id; end if;
-  if exists(select 1 from public.condominium_periods where user_id = owner_id and management_type = 'extraordinary' and status = 'active') then raise exception 'Chiudi la gestione straordinaria in corso prima di aprirne una nuova'; end if;
   insert into public.condominium_periods(id,user_id,management_type,label,start_date,end_date,budget_amount)
     values(p_request_id,owner_id,'extraordinary',trim(p_label),null,null,0) returning updated_at into stamp;
   perform public.revise_condominium_budget(p_request_id, stamp, p_budget, false, p_schedule, 'Apertura gestione straordinaria', gen_random_uuid());
@@ -171,29 +188,15 @@ grant execute on function public.create_condominium_extra(text,numeric,jsonb,uui
 create or replace function public.set_condominium_management_closed(p_period uuid, p_close boolean, p_expected_updated_at timestamptz)
 returns void language plpgsql security invoker set search_path = public
 as $$
-declare current_period public.condominium_periods%rowtype; total_paid numeric(14,2); regular_covered numeric(14,2);
+declare current_period public.condominium_periods%rowtype;
 begin
   if auth.uid() is null then raise exception 'Utente non autenticato'; end if;
   select * into current_period from public.condominium_periods where id = p_period and user_id = auth.uid() for update;
-  if not found or current_period.management_type <> 'extraordinary' then raise exception 'Gestione straordinaria non trovata'; end if;
+  if not found then raise exception 'Gestione non trovata'; end if;
   if current_period.updated_at is distinct from p_expected_updated_at then raise exception 'La gestione è cambiata: riaprila e verifica i dati'; end if;
   if p_close is null then raise exception 'Stato non valido'; end if;
-  if p_close then
-    perform 1 from public.condominium_installments where period_id = p_period order by id for update;
-    perform 1 from public.transactions where recurrence_id in(select planned_recurrence_id from public.condominium_installments where period_id = p_period) order by id for update;
-    if exists(select 1 from public.condominium_installments i where i.period_id = p_period and i.amount > 0 and i.paid_at is null
-      and not exists(select 1 from public.transactions t where t.recurrence_id = i.planned_recurrence_id and t.confirmed_at is not null)) then
-      raise exception 'Ci sono rate ancora da pagare: la gestione resta aperta';
-    end if;
-    select coalesce(sum(amount),0),coalesce(sum(amount + credit_applied) filter(where kind = 'regular'),0)
-      into total_paid, regular_covered from public.condominium_installments where period_id = p_period;
-    if current_period.final_amount is not null and current_period.final_amount <> total_paid then raise exception 'Il saldo consuntivo non è in pareggio: regola il saldo prima di chiudere'; end if;
-    if current_period.final_amount is null and current_period.budget_amount <> regular_covered then raise exception 'Preventivo e rate non coincidono: completa il piano o inserisci il consuntivo prima di chiudere'; end if;
-    update public.condominium_periods set status = 'archived', closing_balance = 0, updated_at = now() where id = p_period;
-  else
-    if exists(select 1 from public.condominium_periods where user_id = auth.uid() and management_type = 'extraordinary' and status = 'active' and id <> p_period) then raise exception 'Un’altra gestione straordinaria è già aperta'; end if;
-    update public.condominium_periods set status = 'active', updated_at = now() where id = p_period;
-  end if;
+  update public.condominium_periods set status = case when p_close then 'archived' else 'active' end,
+    manually_closed = p_close, updated_at = now() where id = p_period;
 end;
 $$;
 revoke all on function public.set_condominium_management_closed(uuid,boolean,timestamptz) from public, anon;

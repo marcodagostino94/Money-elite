@@ -38,21 +38,27 @@ export function revisionTotals(rows: RevisionRow[], budget: number, replaceUnpai
 export type TfrHistoryBase = { closingYear: number; companyAmount: number; fundAmount: number };
 type TfrEntry = { competenceMonth: string; tfrAmount: number; destination: "company" | "fund" };
 type TfrTransfer = { paidAt: string; amount: number };
-export function tfrAnnualHistory(base: TfrHistoryBase, entries: TfrEntry[], transfers: TfrTransfer[], currentYear: number) {
-  const baseDate = `${base.closingYear}-12-31`;
+export function tfrAnnualHistory(base: TfrHistoryBase, entries: TfrEntry[], transfers: TfrTransfer[], currentYear: number, confirmations: TfrHistoryBase[] = []) {
   const rows = [];
+  let company = cents(base.companyAmount), fund = cents(base.fundAmount);
   for (let year = base.closingYear; year < currentYear; year++) {
+    const baseDate = `${year - 1}-12-31`;
     const end = `${year}-12-31`;
-    let company = cents(base.companyAmount), fund = cents(base.fundAmount);
     for (const e of entries) {
+      if (year === base.closingYear) continue;
       const date = `${e.competenceMonth.slice(0, 7)}-01`;
       if (date <= baseDate || date > end) continue;
       if (e.destination === "company") company += cents(e.tfrAmount);
       else fund += cents(e.tfrAmount);
     }
     for (const t of transfers) {
+      if (year === base.closingYear) continue;
       if (t.paidAt.slice(0, 10) <= baseDate || t.paidAt.slice(0, 10) > end) continue;
       company -= cents(t.amount); fund += cents(t.amount);
+    }
+    const confirmed = confirmations.find(c => c.closingYear === year);
+    if (confirmed) {
+      company = cents(confirmed.companyAmount); fund = cents(confirmed.fundAmount);
     }
     rows.push({ year, company: company / 100, fund: fund / 100 });
   }

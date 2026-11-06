@@ -52,3 +52,18 @@ test('storico cumulativo: mese di competenza e trasferimenti alla data effettiva
 test('storico non nasconde un saldo negativo dovuto a dati incoerenti', () => {
   assert.equal(tfrAnnualHistory({closingYear:2025,companyAmount:10,fundAmount:0},[],[{paidAt:'2026-01-01',amount:20}],2027)[1].company,-10);
 });
+test('CU corretta diventa base successiva senza cambiare mensilità', () => {
+ const base={closingYear:2025,companyAmount:1000,fundAmount:0};
+ const entries=[{competenceMonth:'2026-01',tfrAmount:100,destination:'company'},{competenceMonth:'2027-01',tfrAmount:150,destination:'fund'}];
+ const before=structuredClone(entries);
+ const result=tfrAnnualHistory(base,entries,[],2028,[{closingYear:2026,companyAmount:1120,fundAmount:20}]);
+ assert.deepEqual(result,[{year:2025,company:1000,fund:0},{year:2026,company:1120,fund:20},{year:2027,company:1120,fund:170}]);
+ assert.deepEqual(entries,before);
+});
+test('conferme successive restano fisse, rimozione ripristina calcolo', () => {
+ const base={closingYear:2025,companyAmount:1000,fundAmount:0};
+ const confirmations=[{closingYear:2025,companyAmount:1200,fundAmount:50},{closingYear:2027,companyAmount:1500,fundAmount:100}];
+ assert.deepEqual(tfrAnnualHistory(base,[],[],2029,confirmations).at(-1),{year:2028,company:1500,fund:100});
+ assert.deepEqual(tfrAnnualHistory(base,[],[],2029,confirmations.slice(0,1)).at(-1),{year:2028,company:1200,fund:50});
+ assert.deepEqual(tfrAnnualHistory(base,[],[],2029).at(-1),{year:2028,company:1000,fund:0});
+});
